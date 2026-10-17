@@ -1,0 +1,30 @@
+services:
+  friday-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-friday_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-friday_password}
+      POSTGRES_DB: ${POSTGRES_DB:-friday_db}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - friday-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  friday-api:
+    build: .
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-friday_user}:${POSTGRES_PASSWORD:-friday_password}@friday-db:5432/${POSTGRES_DB:-friday_db}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      friday-db:
+        condition: service_healthy
+
+volumes:
+  friday-postgres-data:
