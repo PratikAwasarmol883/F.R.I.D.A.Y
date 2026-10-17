@@ -9,3 +9,35 @@ __pycache__/
 .coverage
 htmlcov/
 .DS_Store
+
+# Nested scratch repo (docs now live in docs/)
+F.R.I.D.A.Y/
+
+# Python / tooling
+*.py[cod]
+.eggs/
+build/
+dist/
+.tox/
+.nox/
+.coverage.*
+coverage.xml
+.ipynb_checkpoints/
+pip-wheel-metadata/
+
+# Env / secrets
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local state
+*.log
+*.sqlite3
+.claude/settings.local.json
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
