@@ -1,6 +1,6 @@
 # F.R.I.D.A.Y
 
-Personal AI assistant. See `F.R.I.D.A.Y/friday_claude_starter_docs/` for `plan.md` and `architecture.md`.
+Personal AI assistant. See `docs/plan.md` and `docs/architecture.md`.
 
 ## Local setup (Milestone 0)
 

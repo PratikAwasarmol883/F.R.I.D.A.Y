@@ -10,8 +10,8 @@
 ## 1. Before Every Session
 
 1. **Read the project documents first:**
-   - `/Users/pratikawasarmol/Desktop/FRIDAY/F.R.I.D.A.Y/friday_claude_starter_docs/plan.md` — Product vision, use cases, and roadmap.
-   - `/Users/pratikawasarmol/Desktop/FRIDAY/F.R.I.D.A.Y/friday_claude_starter_docs/architecture.md` — System design, modules, and implementation strategy.
+   - `docs/plan.md` — Product vision, use cases, and roadmap.
+   - `docs/architecture.md` — System design, modules, and implementation strategy.
 
 2. **Inspect the repository:**
    - Run `git status` to see uncommitted changes and branches.
@@ -199,8 +199,8 @@ When you want to implement FRIDAY, use the `/friday-builder` skill. It will guid
 
 ## 9. Project References
 
-- **Plan:** `/Users/pratikawasarmol/Desktop/FRIDAY/F.R.I.D.A.Y/friday_claude_starter_docs/plan.md`
-- **Architecture:** `/Users/pratikawasarmol/Desktop/FRIDAY/F.R.I.D.A.Y/friday_claude_starter_docs/architecture.md`
+- **Plan:** `docs/plan.md`
+- **Architecture:** `docs/architecture.md`
 - **Engineering Rules:** `.claude/rules/engineering.md`
 - **Security Rules:** `.claude/rules/security.md`
 

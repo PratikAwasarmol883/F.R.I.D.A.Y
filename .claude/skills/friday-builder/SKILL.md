@@ -28,8 +28,8 @@ The FRIDAY Builder Skill guides Claude Code through implementing FRIDAY's archit
    Identify uncommitted changes, current branch, and recent commits.
 
 2. **Read the documentation:**
-   - `/Users/pratikawasarmol/Desktop/FRIDAY/F.R.I.D.A.Y/friday_claude_starter_docs/plan.md`
-   - `/Users/pratikawasarmol/Desktop/FRIDAY/F.R.I.D.A.Y/friday_claude_starter_docs/architecture.md`
+   - `docs/plan.md`
+   - `docs/architecture.md`
 
 3. **Survey the codebase:**
    - What directories exist? Do they match the target architecture?
