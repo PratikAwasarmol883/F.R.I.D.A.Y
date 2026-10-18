@@ -13,7 +13,7 @@ from friday.persistence.database import get_db_session
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["health"])
+router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)

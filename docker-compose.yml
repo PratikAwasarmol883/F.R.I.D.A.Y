@@ -19,6 +19,9 @@ services:
     build: .
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-haiku-5-5}
+      DAILY_TOKEN_BUDGET: ${DAILY_TOKEN_BUDGET:-200000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-friday_user}:${POSTGRES_PASSWORD:-friday_password}@friday-db:5432/${POSTGRES_DB:-friday_db}
     ports:
       - "127.0.0.1:8000:8000"

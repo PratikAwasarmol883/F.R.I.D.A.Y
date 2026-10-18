@@ -7,9 +7,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from friday import __version__
-from friday.api.routes import router as api_router
+from friday.api.error_handlers import register_error_handlers
+from friday.api.routes import api_router
 from friday.core.config import settings
 from friday.core.logging_config import get_logger, setup_logging
+from friday.core.request_context import RequestContextMiddleware
 from friday.persistence.database import get_engine
 
 logger = get_logger(__name__)
@@ -17,6 +19,8 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    if not settings.anthropic_key_configured:
+        logger.warning("ANTHROPIC_API_KEY is not set; /assistant/ask will return 503")
     logger.info("FRIDAY startup complete")
     yield
     await get_engine().dispose()
@@ -37,8 +41,11 @@ def create_app() -> FastAPI:
         allow_origins=settings.allowed_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
     )
+    app.add_middleware(RequestContextMiddleware)
+    register_error_handlers(app)
     app.include_router(api_router)
     return app
 

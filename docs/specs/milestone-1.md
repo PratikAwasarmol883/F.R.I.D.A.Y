@@ -1,6 +1,6 @@
 # Milestone 1 Spec — Authenticated Text Assistant
 
-**Status:** Draft, awaiting approval. No code is written until this is approved.
+**Status:** Implemented (see section 16 for deviations from this spec).
 **Source:** `architecture.md` §13 (Milestone 1), §6–§10; `plan.md` Phase 1.
 
 ## 1. Goal
@@ -184,3 +184,15 @@ M1 needs a **real Postgres** for repository/auth/ownership tests (CI already has
 5. Conversation service/routes.
 6. Assistant service/route with budget, audit, usage.
 7. Docs: README walkthrough, update `.env.example`.
+
+## 16. Implementation notes and deviations
+
+- Domain exceptions are `ProviderError` (base), `ProviderTimeoutError`, `ProviderUnavailableError` instead of `LLM*` names.
+- The body-size cap checks the `Content-Length` header only (returns `413 PAYLOAD_TOO_LARGE`, a code not in the table above); chunked uploads without a length are still bounded by the 8,000-character message limit.
+- `ANTHROPIC_API_KEY` is optional at startup (a warning is logged) so health checks, CI, and Docker work without it; `ask` returns `503 PROVIDER_UNAVAILABLE` until it is set.
+- API schemas live in a single `api/schemas.py`; the `anthropic` adapter file is `anthropic_provider.py`.
+- `usage_records.conversation_id`/`message_id` are nullable with `ON DELETE SET NULL` so spend history survives future conversation deletion; `audit_events` FKs also use `SET NULL`.
+- Added `tzdata` as a dependency so timezone validation works on slim images.
+- Tests use a dedicated `friday_test` database (migrated down to base and up each session) rather than per-test rollback, which allows the concurrency test to use real separate connections.
+- When no provider key is configured, the provider-config error (503) is raised before request-body validation errors for authenticated callers.
+- Not verified: a live call to the Anthropic API (no key was available); the opt-in smoke test exists for this.

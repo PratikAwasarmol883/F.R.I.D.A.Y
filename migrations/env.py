@@ -7,15 +7,17 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from friday.core.config import settings
+from friday.persistence import models  # noqa: F401  (registers tables on Base.metadata)
 from friday.persistence.database import Base, _driver_url
 
 config = context.config
-config.set_main_option("sqlalchemy.url", _driver_url(settings.database_url).replace("%", "%%"))
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", _driver_url(settings.database_url).replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

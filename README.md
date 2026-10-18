@@ -15,10 +15,35 @@ uvicorn friday.app:app --reload     # or: docker compose up --build
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
+## Using the API (Milestone 1)
+
+There is no public signup. An operator creates users and devices on the server:
+
+```bash
+python -m friday.cli create-user --name "Pratik" --timezone Asia/Kolkata
+python -m friday.cli register-device --user-id <user_id> --name macbook --type mac   # prints the token once
+python -m friday.cli revoke-device --device-id <device_id>
+# with Docker Compose: docker compose exec friday-api python -m friday.cli ...
+```
+
+Set `ANTHROPIC_API_KEY` in `.env` to enable the assistant, then:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/assistant/ask \
+  -H "Authorization: Bearer <token>" -H "content-type: application/json" \
+  -d '{"message": "What is 2+2?"}'
+curl http://127.0.0.1:8000/api/v1/conversations/<conversation_id> -H "Authorization: Bearer <token>"
+```
+
+Tests use a separate `friday_test` database on the same Postgres server (created automatically), so
+`docker compose up -d friday-db` must be running. `tests/test_provider_smoke.py` calls the real API
+only when `ANTHROPIC_API_KEY` is set.
+
 ## Checks
 
 ```bash
 ruff check friday tests migrations
+ruff format --check friday tests migrations
 mypy friday
 pytest
 ```

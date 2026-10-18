@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 from friday import __version__
 
 
-def test_health_healthy(client: TestClient) -> None:
-    response = client.get("/api/v1/health")
+def test_health_healthy(fake_db_client: TestClient) -> None:
+    response = fake_db_client.get("/api/v1/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "healthy"
@@ -20,3 +20,9 @@ def test_health_degraded_does_not_leak_error_details(failing_db_client: TestClie
     assert body["status"] == "degraded"
     assert body["database"] == "unavailable"
     assert "secret" not in response.text
+
+
+def test_health_is_public_and_works_against_real_database(client: TestClient) -> None:
+    response = client.get("/api/v1/health")
+    assert response.status_code == 200
+    assert response.json()["database"] == "connected"
