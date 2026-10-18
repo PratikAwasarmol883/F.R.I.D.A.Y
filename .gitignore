@@ -41,3 +41,85 @@ pip-wheel-metadata/
 .vscode/
 *.swp
 Thumbs.db
+
+# Node / npm (future web client)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.npm/
+.next/
+.vite/
+.turbo/
+
+# Screenshots and macOS metadata
+Screenshot*.png
+Screen Recording*.mov
+.AppleDouble
+.CFUserTextEncoding
+
+
+```gitignore
+# Environment variables and virtual environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+ENV/
+
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+build/
+dist/
+.ipynb_checkpoints/
+pip-wheel-metadata/
+
+# Node.js / JavaScript
+node_modules/
+.npm/
+.next/
+.vite/
+.turbo/
+npm-debug.log*
+yarn-error.log*
+
+# Bun package manager
+.bun/
+bun.lockb
+
+# Secrets and certificates
+*.pem
+*.key
+
+# Local state
+*.log
+*.sqlite3
+.claude/settings.local.json
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+.AppleDouble
+.CFUserTextEncoding
+
+# Nested scratch repository
+F.R.I.D.A.Y/
+
+# Screenshots and recordings
+Screenshot*.png
+Screen Recording*.mov
