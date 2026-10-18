@@ -15,6 +15,7 @@ _EXTRA_FIELDS = (
     "input_tokens",
     "output_tokens",
     "latency_ms",
+    "tool_calls",
     "outcome",
 )
 

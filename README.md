@@ -35,9 +35,25 @@ curl -X POST http://127.0.0.1:8000/api/v1/assistant/ask \
 curl http://127.0.0.1:8000/api/v1/conversations/<conversation_id> -H "Authorization: Bearer <token>"
 ```
 
+### Tools (Milestone 2)
+
+The assistant can call a read-only `web_search` tool. It is available to a device only when all of
+these hold: `SEARCH_API_KEY` is set (Tavily), `web_search` is in `ENABLED_TOOLS`, and the device was
+granted the scope:
+
+```bash
+python -m friday.cli register-device --user-id <user_id> --name macbook --type mac --scopes tool:web_search
+python -m friday.cli set-device-scopes --device-id <device_id> --scopes tool:web_search   # replaces; empty clears
+python -m friday.cli tool-log --user-id <user_id> --limit 20                                # audit view
+```
+
+`POST /assistant/ask` then also returns `sources` (URLs actually retrieved this turn) and `tools_used`.
+Search results are treated as untrusted data; every tool call is validated, scoped, bounded, and
+recorded in `tool_executions` (arguments redacted, result bodies not stored).
+
 Tests use a separate `friday_test` database on the same Postgres server (created automatically), so
-`docker compose up -d friday-db` must be running. `tests/test_provider_smoke.py` calls the real API
-only when `ANTHROPIC_API_KEY` is set.
+`docker compose up -d friday-db` must be running. `tests/test_provider_smoke.py` and `tests/test_tools_smoke.py` call real
+services only when `ANTHROPIC_API_KEY` (and `SEARCH_API_KEY` for the tools test) are set.
 
 ## Checks
 

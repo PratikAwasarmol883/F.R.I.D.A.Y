@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from friday.core.security import TOKEN_PREFIX, generate_token, hash_token
 from friday.domain.enums import AuditOutcome, DeviceType
 from friday.domain.exceptions import NotAuthenticatedError, NotFoundError
+from friday.orchestration.tool_contracts import SCOPE_PATTERN
 from friday.persistence.models import Device, User
 from friday.persistence.repositories.audit import AuditRepository
 from friday.persistence.repositories.devices import DeviceRepository
@@ -17,6 +18,7 @@ from friday.persistence.repositories.users import UserRepository
 class CurrentUser:
     user_id: uuid.UUID
     device_id: uuid.UUID
+    scopes: frozenset[str] = frozenset()
 
 
 class AuthService:
@@ -35,7 +37,9 @@ class AuthService:
             raise NotAuthenticatedError
         await self._devices.touch_last_seen(device.id)
         await self._session.commit()
-        return CurrentUser(user_id=device.user_id, device_id=device.id)
+        return CurrentUser(
+            user_id=device.user_id, device_id=device.id, scopes=frozenset(device.scopes)
+        )
 
     async def create_user(self, display_name: str, timezone: str) -> User:
         try:
@@ -54,13 +58,20 @@ class AuthService:
         return user
 
     async def register_device(
-        self, user_id: uuid.UUID, name: str, device_type: DeviceType
+        self,
+        user_id: uuid.UUID,
+        name: str,
+        device_type: DeviceType,
+        scopes: list[str] | None = None,
     ) -> tuple[Device, str]:
         """Returns the device and the plaintext token; only the hash is persisted."""
+        clean_scopes = _validate_scopes(scopes or [])
         if await self._users.get(user_id) is None:
             raise NotFoundError
         token = generate_token()
-        device = await self._devices.create(user_id, name, str(device_type), hash_token(token))
+        device = await self._devices.create(
+            user_id, name, str(device_type), hash_token(token), clean_scopes
+        )
         await self._audit.add(
             action="device.register",
             outcome=AuditOutcome.SUCCESS,
@@ -85,3 +96,26 @@ class AuthService:
             target_id=str(device.id),
         )
         await self._session.commit()
+
+    async def set_device_scopes(self, device_id: uuid.UUID, scopes: list[str]) -> Device:
+        device = await self._devices.set_scopes(device_id, _validate_scopes(scopes))
+        if device is None:
+            raise NotFoundError
+        await self._audit.add(
+            action="device.scopes_update",
+            outcome=AuditOutcome.SUCCESS,
+            user_id=device.user_id,
+            device_id=device.id,
+            target_type="device",
+            target_id=str(device.id),
+        )
+        await self._session.commit()
+        return device
+
+
+def _validate_scopes(scopes: list[str]) -> list[str]:
+    cleaned = sorted({scope.strip() for scope in scopes if scope.strip()})
+    for scope in cleaned:
+        if not SCOPE_PATTERN.match(scope):
+            raise ValueError(f"Invalid scope: {scope!r} (expected tool:<name>)")
+    return cleaned

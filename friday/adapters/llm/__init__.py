@@ -1,3 +1,23 @@
-from friday.adapters.llm.base import ChatMessage, LLMProvider, LLMResult
+from friday.adapters.llm.base import (
+    AssistantToolTurn,
+    ChatMessage,
+    LLMMessage,
+    LLMProvider,
+    LLMResult,
+    ToolCall,
+    ToolResult,
+    ToolResultsTurn,
+    ToolSpec,
+)
 
-__all__ = ["ChatMessage", "LLMProvider", "LLMResult"]
+__all__ = [
+    "AssistantToolTurn",
+    "ChatMessage",
+    "LLMMessage",
+    "LLMProvider",
+    "LLMResult",
+    "ToolCall",
+    "ToolResult",
+    "ToolResultsTurn",
+    "ToolSpec",
+]

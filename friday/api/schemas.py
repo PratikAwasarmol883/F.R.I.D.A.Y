@@ -63,8 +63,20 @@ class Usage(BaseModel):
     output_tokens: int
 
 
+class SourceOut(BaseModel):
+    title: str
+    url: str
+
+
+class ToolUseOut(BaseModel):
+    name: str
+    status: str
+
+
 class AskResponse(BaseModel):
     conversation_id: uuid.UUID
     message_id: uuid.UUID
     answer: str
     usage: Usage
+    sources: list[SourceOut] = []
+    tools_used: list[ToolUseOut] = []

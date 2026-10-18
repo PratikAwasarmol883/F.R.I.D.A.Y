@@ -15,11 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from friday.adapters.llm.fake import FakeLLMProvider
-from friday.api.dependencies import get_llm_provider
+from friday.api.dependencies import get_llm_provider, get_tool_registry
 from friday.app import create_app
 from friday.core.config import Settings, get_settings, settings
 from friday.core.logging_config import JSONFormatter
 from friday.domain.enums import DeviceType
+from friday.orchestration.tool_registry import ToolRegistry
 from friday.persistence.database import _driver_url, get_db_session
 from friday.services.auth_service import AuthService
 
@@ -85,11 +86,15 @@ def run_db(factory: SessionFactory, fn: Callable[[AsyncSession], Awaitable[T]]) 
     return asyncio.run(go())
 
 
-def make_user(factory: SessionFactory, name: str = "alice") -> Seeded:
+def make_user(
+    factory: SessionFactory, name: str = "alice", scopes: list[str] | None = None
+) -> Seeded:
     async def go(session: AsyncSession) -> Seeded:
         auth = AuthService(session)
         user = await auth.create_user(name, "UTC")
-        device, token = await auth.register_device(user.id, f"{name}-device", DeviceType.CLI)
+        device, token = await auth.register_device(
+            user.id, f"{name}-device", DeviceType.CLI, scopes
+        )
         return Seeded(user.id, device.id, token)
 
     return run_db(factory, go)
@@ -106,6 +111,11 @@ def bob(session_factory: SessionFactory) -> Seeded:
 
 
 @pytest.fixture
+def alice_tools(session_factory: SessionFactory) -> Seeded:
+    return make_user(session_factory, "alice", ["tool:web_search"])
+
+
+@pytest.fixture
 def llm() -> FakeLLMProvider:
     return FakeLLMProvider()
 
@@ -115,7 +125,9 @@ BuildApp = Callable[..., Any]
 
 @pytest.fixture
 def build_app(session_factory: SessionFactory) -> BuildApp:
-    def build(llm: FakeLLMProvider | None = None, **overrides: Any) -> Any:
+    def build(
+        llm: FakeLLMProvider | None = None, registry: ToolRegistry | None = None, **overrides: Any
+    ) -> Any:
         app = create_app()
         test_settings = Settings(_env_file=None).model_copy(update=overrides)
 
@@ -127,6 +139,8 @@ def build_app(session_factory: SessionFactory) -> BuildApp:
         app.dependency_overrides[get_settings] = lambda: test_settings
         if llm is not None:
             app.dependency_overrides[get_llm_provider] = lambda: llm
+        if registry is not None:
+            app.dependency_overrides[get_tool_registry] = lambda: registry
         return app
 
     return build
@@ -142,8 +156,12 @@ def client(build_app: BuildApp, llm: FakeLLMProvider) -> Iterator[TestClient]:
 def make_client(build_app: BuildApp) -> Iterator[Callable[..., TestClient]]:
     clients: list[TestClient] = []
 
-    def factory(llm: FakeLLMProvider | None = None, **overrides: Any) -> TestClient:
-        test_client = TestClient(build_app(llm, **overrides), raise_server_exceptions=False)
+    def factory(
+        llm: FakeLLMProvider | None = None, registry: ToolRegistry | None = None, **overrides: Any
+    ) -> TestClient:
+        test_client = TestClient(
+            build_app(llm, registry, **overrides), raise_server_exceptions=False
+        )
         clients.append(test_client)
         return test_client
 
@@ -191,3 +209,11 @@ def log_lines(client: TestClient) -> Iterator[list[str]]:
     root.addHandler(collector)
     yield collector.lines
     root.removeHandler(collector)
+
+
+@pytest.fixture
+def client_ask(client: TestClient, alice: Seeded) -> tuple[str, str]:
+    body = client.post(
+        "/api/v1/assistant/ask", json={"message": "seed"}, headers=alice.headers
+    ).json()
+    return body["conversation_id"], body["message_id"]

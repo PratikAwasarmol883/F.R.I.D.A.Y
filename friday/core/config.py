@@ -24,9 +24,26 @@ class Settings(BaseSettings):
     max_history_messages: int = Field(default=20, ge=0, le=100)
     daily_token_budget: int = Field(default=200_000, ge=1)
 
+    enabled_tools: str = "web_search"  # comma-separated kill switch
+    search_provider: Literal["tavily"] = "tavily"
+    search_api_key: SecretStr | None = None
+    tool_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    max_tool_calls_per_ask: int = Field(default=3, ge=1, le=10)
+    search_max_results: int = Field(default=5, ge=1, le=5)
+    search_daily_limit: int = Field(default=50, ge=1)
+    ask_deadline_seconds: float = Field(default=60.0, gt=0, le=300)
+
     @property
     def anthropic_key_configured(self) -> bool:
         return bool(self.anthropic_api_key and self.anthropic_api_key.get_secret_value())
+
+    @property
+    def enabled_tool_names(self) -> frozenset[str]:
+        return frozenset(name.strip() for name in self.enabled_tools.split(",") if name.strip())
+
+    @property
+    def search_key_configured(self) -> bool:
+        return bool(self.search_api_key and self.search_api_key.get_secret_value())
 
 
 settings = Settings()

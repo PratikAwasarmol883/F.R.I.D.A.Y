@@ -14,7 +14,12 @@ class DeviceRepository:
         self._session = session
 
     async def create(
-        self, user_id: uuid.UUID, name: str, device_type: str, token_hash: str
+        self,
+        user_id: uuid.UUID,
+        name: str,
+        device_type: str,
+        token_hash: str,
+        scopes: list[str] | None = None,
     ) -> Device:
         device = Device(
             id=uuid.uuid4(),
@@ -22,6 +27,7 @@ class DeviceRepository:
             name=name,
             device_type=device_type,
             token_hash=token_hash,
+            scopes=scopes or [],
         )
         self._session.add(device)
         await self._session.flush()
@@ -50,6 +56,16 @@ class DeviceRepository:
             update(Device)
             .where(Device.id == device_id, Device.revoked_at.is_(None))
             .values(revoked_at=datetime.now(UTC))
+            .returning(Device)
+        )
+        return await self._session.scalar(stmt)
+
+    async def set_scopes(self, device_id: uuid.UUID, scopes: list[str]) -> Device | None:
+        """Replace the scopes of an active device; None if missing or revoked."""
+        stmt = (
+            update(Device)
+            .where(Device.id == device_id, Device.revoked_at.is_(None))
+            .values(scopes=scopes)
             .returning(Device)
         )
         return await self._session.scalar(stmt)
