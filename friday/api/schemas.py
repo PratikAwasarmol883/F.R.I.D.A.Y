@@ -73,6 +73,23 @@ class ToolUseOut(BaseModel):
     status: str
 
 
+class AudioOut(BaseModel):
+    format: str
+    base64: str
+
+
+class VoiceResponse(BaseModel):
+    transcript: str
+    answer: str
+    conversation_id: uuid.UUID
+    message_id: uuid.UUID
+    usage: Usage
+    sources: list[SourceOut] = []
+    tools_used: list[ToolUseOut] = []
+    audio: AudioOut | None = None
+    speech_error: str | None = None
+
+
 class AskResponse(BaseModel):
     conversation_id: uuid.UUID
     message_id: uuid.UUID

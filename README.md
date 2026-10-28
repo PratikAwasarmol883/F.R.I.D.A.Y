@@ -90,6 +90,18 @@ truly supports a claim, and says so in the report's limitations. Page fetching i
 addresses only, connection pinned to the validated IP, redirects re-validated); the model may only fetch URLs
 from search results or from the question. Real-network fetching is opt-in tested: `FRIDAY_LIVE_FETCH=1 pytest tests/test_fetch_live.py`.
 
+### Voice (Milestone 5)
+
+`POST /api/v1/assistant/voice` takes a short audio recording (`multipart/form-data`, field `audio`, up to
+6 MB; wav, mp3, m4a, mp4, webm, ogg, flac), transcribes it, runs the normal assistant flow in a short
+spoken style, and returns the transcript, the answer, and synthesized speech (`audio.base64`). If speech
+synthesis fails you still get the text (`audio: null`, `speech_error` set). Audio is never stored; only the
+transcript is, as the user's message. Set `SPEECH_API_KEY` (any OpenAI-compatible speech API).
+
+The macOS push-to-talk client lives in `clients/macos` (see its README). Its microphone, playback, local
+speech, and Keychain adapters need a Mac with devices; everything else is covered by automated tests.
+Opt-in live test: `SPEECH_API_KEY=... pytest tests/test_speech_live.py`.
+
 Tests use a separate `friday_test` database on the same Postgres server (created automatically), so
 `docker compose up -d friday-db` must be running. `tests/test_provider_smoke.py` and `tests/test_tools_smoke.py` call real
 services only when `ANTHROPIC_API_KEY` (and `SEARCH_API_KEY` for the tools test) are set.

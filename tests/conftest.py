@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from friday.adapters.llm.fake import FakeLLMProvider
-from friday.api.dependencies import get_llm_provider, get_tool_registry
+from friday.adapters.speech.fake import FakeSpeech
+from friday.api.dependencies import get_llm_provider, get_speech_provider, get_tool_registry
 from friday.app import create_app
 from friday.core.config import Settings, get_settings, settings
 from friday.core.logging_config import JSONFormatter
@@ -134,10 +135,13 @@ BuildApp = Callable[..., Any]
 @pytest.fixture
 def build_app(session_factory: SessionFactory) -> BuildApp:
     def build(
-        llm: FakeLLMProvider | None = None, registry: ToolRegistry | None = None, **overrides: Any
+        llm: FakeLLMProvider | None = None,
+        registry: ToolRegistry | None = None,
+        speech: FakeSpeech | None = None,
+        **overrides: Any,
     ) -> Any:
-        app = create_app()
         test_settings = Settings(_env_file=None).model_copy(update=overrides)
+        app = create_app(test_settings)
 
         async def db_override() -> AsyncGenerator[AsyncSession, None]:
             async with session_factory() as session:
@@ -149,6 +153,8 @@ def build_app(session_factory: SessionFactory) -> BuildApp:
             app.dependency_overrides[get_llm_provider] = lambda: llm
         if registry is not None:
             app.dependency_overrides[get_tool_registry] = lambda: registry
+        if speech is not None:
+            app.dependency_overrides[get_speech_provider] = lambda: speech
         return app
 
     return build
@@ -165,10 +171,13 @@ def make_client(build_app: BuildApp) -> Iterator[Callable[..., TestClient]]:
     clients: list[TestClient] = []
 
     def factory(
-        llm: FakeLLMProvider | None = None, registry: ToolRegistry | None = None, **overrides: Any
+        llm: FakeLLMProvider | None = None,
+        registry: ToolRegistry | None = None,
+        speech: FakeSpeech | None = None,
+        **overrides: Any,
     ) -> TestClient:
         test_client = TestClient(
-            build_app(llm, registry, **overrides), raise_server_exceptions=False
+            build_app(llm, registry, speech, **overrides), raise_server_exceptions=False
         )
         clients.append(test_client)
         return test_client

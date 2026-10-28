@@ -44,6 +44,12 @@ SYSTEM_PROMPT_WITH_TOOLS = _BASE_PROMPT + (
 )
 
 
+VOICE_SUFFIX = (
+    " The user is speaking to you and your reply will be read aloud: answer in one to three "
+    "short sentences of plain speech, with no markdown, lists, or URLs."
+)
+
+
 @dataclass(frozen=True)
 class AskHooks:
     """Optional integration points used by background tasks; the synchronous route passes none."""
@@ -93,6 +99,7 @@ class AssistantService:
         message: str,
         conversation_id: uuid.UUID | None,
         hooks: AskHooks | None = None,
+        style: str = "text",
     ) -> AskResult:
         history = await self._load_history(user, conversation_id)
         started = time.perf_counter()
@@ -128,7 +135,8 @@ class AssistantService:
                     SYSTEM_PROMPT_WITH_TOOLS
                     if advertised_tools(self._registry, ctx)
                     else SYSTEM_PROMPT_NO_TOOLS
-                ),
+                )
+                + (VOICE_SUFFIX if style == "voice" else ""),
                 max_output_tokens=self._settings.llm_max_output_tokens,
                 llm_timeout_seconds=self._settings.llm_timeout_seconds,
                 deadline_seconds=self._settings.ask_deadline_seconds,

@@ -52,3 +52,19 @@ class ForbiddenError(DomainError):
 
 class ReportFormatError(ProviderError):
     """The model did not return a valid structured report."""
+
+
+class PayloadTooLargeError(DomainError):
+    """An upload exceeds the size limit."""
+
+
+class UnsupportedMediaError(DomainError):
+    """An upload is not a supported audio format."""
+
+
+class NoSpeechError(DomainError):
+    """The transcription contained no usable speech."""
+
+
+class VoiceLimitError(DomainError):
+    """The user's daily voice request limit is used up."""

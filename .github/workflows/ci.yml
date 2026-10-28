@@ -34,9 +34,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev]"
-      - run: ruff check friday tests migrations
-      - run: ruff format --check friday tests migrations
-      - run: mypy friday
+      - run: ruff check friday tests migrations clients
+      - run: ruff format --check friday tests migrations clients
+      - run: mypy friday clients/macos/friday_client
       - run: pytest
       - name: Migrations apply cleanly (up, down, up)
         run: |

@@ -9,12 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from friday import __version__
 from friday.api.error_handlers import register_error_handlers
 from friday.api.routes import api_router
-from friday.core.config import settings
+from friday.core.config import Settings, settings
 from friday.core.logging_config import get_logger, setup_logging
-from friday.core.request_context import RequestContextMiddleware
+from friday.core.request_context import BodyLimitMiddleware, RequestContextMiddleware
 from friday.persistence.database import get_engine
 
 logger = get_logger(__name__)
+
+VOICE_PATH = "/api/v1/assistant/voice"
+VOICE_FRAMING_BYTES = 64 * 1024  # multipart boundaries and form fields
 
 
 @asynccontextmanager
@@ -27,7 +30,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info("FRIDAY shutdown")
 
 
-def create_app() -> FastAPI:
+def create_app(app_settings: Settings | None = None) -> FastAPI:
+    cfg = app_settings or settings
     setup_logging()
     app = FastAPI(
         title="FRIDAY",
@@ -36,6 +40,8 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=lifespan,
     )
+    limits = {VOICE_PATH: cfg.voice_max_upload_bytes + VOICE_FRAMING_BYTES}
+    app.add_middleware(BodyLimitMiddleware, path_limits=limits)  # innermost: wraps `receive`
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
@@ -44,7 +50,10 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
-    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(
+        RequestContextMiddleware,
+        path_limits=limits,
+    )
     register_error_handlers(app)
     app.include_router(api_router)
     return app

@@ -3,7 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from friday.adapters.llm import LLMProvider
-from friday.composition import build_llm, get_registry
+from friday.composition import LazyLLMProvider, LazySpeech, get_registry
 from friday.core.config import Settings, get_settings
 from friday.core.logging_config import get_logger
 from friday.orchestration.tool_registry import ToolRegistry
@@ -28,7 +28,11 @@ async def get_current_user(
 
 
 def get_llm_provider(settings: Settings = Depends(get_settings)) -> LLMProvider:
-    return build_llm(settings)
+    return LazyLLMProvider(settings)
+
+
+def get_speech_provider(settings: Settings = Depends(get_settings)) -> LazySpeech:
+    return LazySpeech(settings)
 
 
 def get_tool_registry(settings: Settings = Depends(get_settings)) -> ToolRegistry:

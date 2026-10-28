@@ -10,13 +10,17 @@ from friday.domain.exceptions import (
     DomainError,
     ForbiddenError,
     IdempotencyConflictError,
+    NoSpeechError,
     NotAuthenticatedError,
     NotFoundError,
+    PayloadTooLargeError,
     ProviderError,
     ProviderTimeoutError,
     ProviderUnavailableError,
     TaskLimitError,
     TaskNotCancellableError,
+    UnsupportedMediaError,
+    VoiceLimitError,
 )
 
 # Most specific first: ProviderError is the base of the other two provider errors.
@@ -25,6 +29,10 @@ _DOMAIN_ERRORS: list[tuple[type[DomainError], int, str, str]] = [
     (NotFoundError, 404, "NOT_FOUND", "Resource not found."),
     (ForbiddenError, 403, "FORBIDDEN", "This device is not permitted to do that."),
     (BudgetExceededError, 429, "BUDGET_EXCEEDED", "The daily usage budget has been reached."),
+    (PayloadTooLargeError, 413, "PAYLOAD_TOO_LARGE", "The upload is too large."),
+    (UnsupportedMediaError, 415, "UNSUPPORTED_MEDIA_TYPE", "That audio format is not supported."),
+    (NoSpeechError, 422, "NO_SPEECH_DETECTED", "No speech was detected in the recording."),
+    (VoiceLimitError, 429, "VOICE_LIMIT", "The daily voice request limit has been reached."),
     (TaskLimitError, 429, "TASK_LIMIT", "Too many active tasks; wait for one to finish."),
     (
         IdempotencyConflictError,

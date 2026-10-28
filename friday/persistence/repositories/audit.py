@@ -1,5 +1,7 @@
 import uuid
+from datetime import datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from friday.core.request_context import request_id_var
@@ -10,6 +12,18 @@ from friday.persistence.models import AuditEvent
 class AuditRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def count_since(self, user_id: uuid.UUID, action: str, since: datetime) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(
+                AuditEvent.user_id == user_id,
+                AuditEvent.action == action,
+                AuditEvent.created_at >= since,
+            )
+        )
+        return int(await self._session.scalar(stmt) or 0)
 
     async def add(
         self,
