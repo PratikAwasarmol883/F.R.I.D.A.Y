@@ -14,6 +14,7 @@ from friday.adapters.llm import (
     ChatMessage,
     LLMMessage,
     LLMProvider,
+    LLMResult,
     ToolCall,
     ToolResult,
     ToolResultsTurn,
@@ -89,8 +90,12 @@ def safe_tool_name(name: object) -> str:
     return name if isinstance(name, str) and NAME_PATTERN.match(name) else "invalid_name"
 
 
-def _stored_arguments(arguments: Any, redacted_fields: frozenset[str]) -> dict[str, Any]:
+def _stored_arguments(
+    arguments: Any, redacted_fields: frozenset[str], tool: Tool[Any, Any] | None = None
+) -> dict[str, Any]:
     value = arguments if isinstance(arguments, dict) else {"value": str(arguments)[:500]}
+    if tool is not None and isinstance(arguments, dict):
+        value = tool.redact_arguments(dict(arguments))
     redacted = redact_value(value, redacted_fields)
     if len(json.dumps(redacted, default=str)) > MAX_STORED_ARGUMENT_CHARS:
         return {"_truncated": True, "preview": redact_text(json.dumps(value, default=str)[:500])}
@@ -103,6 +108,7 @@ def _hash(arguments: Any) -> str:
 
 EventCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
 CancelCheck = Callable[[], Awaitable[None]]
+UsageCallback = Callable[[LLMResult], Awaitable[None]]
 
 
 class ToolLoop:
@@ -120,6 +126,7 @@ class ToolLoop:
         retry_backoff: tuple[float, float] = (0.1, 0.3),
         on_event: EventCallback | None = None,
         check_cancelled: CancelCheck | None = None,
+        on_usage: UsageCallback | None = None,
     ) -> None:
         self._llm = llm
         self._registry = registry
@@ -132,6 +139,7 @@ class ToolLoop:
         self._backoff = retry_backoff
         self._on_event = on_event
         self._check_cancelled = check_cancelled
+        self._on_usage = on_usage
 
     async def _checkpoint(self) -> None:
         if self._check_cancelled is not None:
@@ -179,6 +187,8 @@ class ToolLoop:
                 tools=specs,
                 tool_choice="none" if (final_turn and specs) else "auto",
             )
+            if self._on_usage is not None:
+                await self._on_usage(result)  # spend is recorded even if the ask later fails
             tokens_in += result.input_tokens
             tokens_out += result.output_tokens
 
@@ -233,7 +243,7 @@ class ToolLoop:
             risk_class=str(tool.contract.risk_class) if tool else None,
             status=ToolStatus.DENIED,
             arguments_redacted=_stored_arguments(
-                call.arguments, tool.contract.redacted_fields if tool else frozenset()
+                call.arguments, tool.contract.redacted_fields if tool else frozenset(), tool
             ),
             arguments_hash=_hash(call.arguments),
             result_meta=None,
@@ -295,7 +305,7 @@ class ToolLoop:
             tool_version=contract.version,
             risk_class=str(contract.risk_class),
             status=status,
-            arguments_redacted=_stored_arguments(call.arguments, contract.redacted_fields),
+            arguments_redacted=_stored_arguments(call.arguments, contract.redacted_fields, tool),
             arguments_hash=_hash(call.arguments),
             result_meta=meta,
             error_code=error_code,

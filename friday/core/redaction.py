@@ -17,6 +17,11 @@ _SECRET_PATTERNS = [
 ]
 
 
+def contains_known_secret(text: str) -> bool:
+    """Only recognizable credential formats; unlike `contains_secret` it ignores long slugs."""
+    return any(pattern.search(text) for pattern in _SECRET_PATTERNS[:-1])
+
+
 def contains_secret(text: str) -> bool:
     return any(pattern.search(text) for pattern in _SECRET_PATTERNS)
 

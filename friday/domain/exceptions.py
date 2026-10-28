@@ -44,3 +44,11 @@ class DeviceRevokedError(DomainError):
 
 class InvalidTaskInputError(DomainError):
     """A stored task input no longer validates."""
+
+
+class ForbiddenError(DomainError):
+    """The caller is authenticated but lacks the scope for this operation."""
+
+
+class ReportFormatError(ProviderError):
+    """The model did not return a valid structured report."""

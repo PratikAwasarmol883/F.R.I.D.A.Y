@@ -26,7 +26,10 @@ from friday.services.auth_service import AuthService
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_DB = "friday_test"
-TABLES = "users, devices, conversations, messages, usage_records, audit_events, tasks, task_events"
+TABLES = (
+    "users, devices, conversations, messages, usage_records, audit_events, tasks, task_events,"
+    " reports, research_sources"
+)
 T = TypeVar("T")
 
 SessionFactory = async_sessionmaker[AsyncSession]
@@ -108,6 +111,11 @@ def alice(session_factory: SessionFactory) -> Seeded:
 @pytest.fixture
 def bob(session_factory: SessionFactory) -> Seeded:
     return make_user(session_factory, "bob")
+
+
+@pytest.fixture
+def alice_research(session_factory: SessionFactory) -> Seeded:
+    return make_user(session_factory, "alice", ["tool:web_search", "tool:web_fetch"])
 
 
 @pytest.fixture

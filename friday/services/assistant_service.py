@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from friday.adapters.llm import ChatMessage, LLMMessage, LLMProvider
+from friday.adapters.llm import ChatMessage, LLMMessage, LLMProvider, LLMResult
 from friday.core.config import Settings
 from friday.core.logging_config import get_logger
 from friday.domain.enums import AuditOutcome, MessageRole
@@ -101,6 +101,23 @@ class AssistantService:
             self._check_budget(baseline, 0)
             ctx = await self._policy_context(user)
             await self._session.commit()  # no DB transaction is held across LLM or tool calls
+            usage_ids: list[uuid.UUID] = []
+
+            async def record_usage(llm_result: LLMResult) -> None:
+                usage_ids.append(
+                    await self._usage.add(
+                        user_id=user.user_id,
+                        conversation_id=conversation_id,
+                        message_id=None,
+                        task_id=hooks.task_id if hooks else None,
+                        provider=llm_result.provider,
+                        model=llm_result.model,
+                        input_tokens=llm_result.input_tokens,
+                        output_tokens=llm_result.output_tokens,
+                    )
+                )
+                await self._session.commit()
+
             loop = ToolLoop(
                 self._llm,
                 self._registry,
@@ -116,6 +133,7 @@ class AssistantService:
                 llm_timeout_seconds=self._settings.llm_timeout_seconds,
                 deadline_seconds=self._settings.ask_deadline_seconds,
                 check_budget=lambda spent: self._check_budget(baseline, spent),
+                on_usage=record_usage,
                 on_event=hooks.progress if hooks else None,
                 check_cancelled=hooks.check_cancelled if hooks else None,
             )
@@ -136,15 +154,7 @@ class AssistantService:
         await self._tool_executions.attach_to_message(
             result.execution_ids, conversation.id, reply.id
         )
-        await self._usage.add(
-            user_id=user.user_id,
-            conversation_id=conversation.id,
-            message_id=reply.id,
-            provider=result.provider,
-            model=result.model,
-            input_tokens=result.input_tokens,
-            output_tokens=result.output_tokens,
-        )
+        await self._usage.attach_to_message(usage_ids, conversation.id, reply.id)
         await self._conversations.touch(conversation.id)
         await self._audit.add(
             action="assistant.ask",

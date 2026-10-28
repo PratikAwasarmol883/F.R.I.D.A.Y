@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from friday.api.dependencies import get_current_user
 from friday.api.schemas import (
+    ResearchResultOut,
     SourceOut,
     TaskCreate,
     TaskEventOut,
@@ -37,8 +38,15 @@ def _error_message(code: str | None) -> str | None:
 
 
 def to_task_out(task: Task, answer: str | None) -> TaskOut:
-    result = None
-    if task.status == TaskStatus.SUCCEEDED.value and task.result:
+    result: TaskResultOut | ResearchResultOut | None = None
+    if task.status == TaskStatus.SUCCEEDED.value and task.result and task.type == TaskType.RESEARCH:
+        stored = task.result
+        result = ResearchResultOut(
+            report_id=uuid.UUID(stored["report_id"]),
+            usage=Usage(**stored["usage"]),
+            sources_count=stored["sources_count"],
+        )
+    elif task.status == TaskStatus.SUCCEEDED.value and task.result:
         stored = task.result
         result = TaskResultOut(
             conversation_id=uuid.UUID(stored["conversation_id"]),

@@ -8,6 +8,7 @@ from friday.core.request_context import request_id_var
 from friday.domain.exceptions import (
     BudgetExceededError,
     DomainError,
+    ForbiddenError,
     IdempotencyConflictError,
     NotAuthenticatedError,
     NotFoundError,
@@ -22,6 +23,7 @@ from friday.domain.exceptions import (
 _DOMAIN_ERRORS: list[tuple[type[DomainError], int, str, str]] = [
     (NotAuthenticatedError, 401, "UNAUTHENTICATED", "Authentication is required or invalid."),
     (NotFoundError, 404, "NOT_FOUND", "Resource not found."),
+    (ForbiddenError, 403, "FORBIDDEN", "This device is not permitted to do that."),
     (BudgetExceededError, 429, "BUDGET_EXCEEDED", "The daily usage budget has been reached."),
     (TaskLimitError, 429, "TASK_LIMIT", "Too many active tasks; wait for one to finish."),
     (

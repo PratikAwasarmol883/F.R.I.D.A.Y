@@ -71,6 +71,25 @@ curl -X POST http://127.0.0.1:8000/api/v1/tasks/<task_id>/cancel -H "Authorizati
 - Tasks run with the creating device's *current* scopes; revoking the device cancels its queued work.
 - Operators: `python -m friday.cli tasks --user-id <id> [--status failed]` and `requeue-task --task-id <id>`.
 
+### Research reports (Milestone 4)
+
+Research runs as a background task and produces a cited report. The device needs both tool scopes:
+
+```bash
+python -m friday.cli register-device --user-id <id> --name macbook --type mac --scopes tool:web_search,tool:web_fetch
+curl -X POST http://127.0.0.1:8000/api/v1/research -H "Authorization: Bearer <token>" \
+  -H "content-type: application/json" -d '{"question": "What changed in Python 3.14?", "max_sources": 4}'   # 202 + task
+curl http://127.0.0.1:8000/api/v1/tasks/<task_id>    -H "Authorization: Bearer <token>"   # result.report_id when done
+curl http://127.0.0.1:8000/api/v1/reports/<report_id> -H "Authorization: Bearer <token>"   # JSON + markdown
+curl -X DELETE http://127.0.0.1:8000/api/v1/reports/<report_id> -H "Authorization: Bearer <token>"
+```
+
+Every finding cites only pages that were actually fetched; findings without a valid citation are marked
+`uncertain`, and sources carry retrieval times and content hashes. The server cannot verify that a source
+truly supports a claim, and says so in the report's limitations. Page fetching is SSRF-protected (public
+addresses only, connection pinned to the validated IP, redirects re-validated); the model may only fetch URLs
+from search results or from the question. Real-network fetching is opt-in tested: `FRIDAY_LIVE_FETCH=1 pytest tests/test_fetch_live.py`.
+
 Tests use a separate `friday_test` database on the same Postgres server (created automatically), so
 `docker compose up -d friday-db` must be running. `tests/test_provider_smoke.py` and `tests/test_tools_smoke.py` call real
 services only when `ANTHROPIC_API_KEY` (and `SEARCH_API_KEY` for the tools test) are set.

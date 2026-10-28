@@ -26,7 +26,7 @@ from friday.workers.errors import LeaseLostError, TaskCancelled
 from friday.workers.handlers.assistant_ask import AssistantAskHandler
 
 from .conftest import Seeded, SessionFactory, run_db
-from .helpers import audit_rows, count, message_rows, tool_rows
+from .helpers import audit_rows, count, message_rows, tool_rows, usage_rows
 from .task_helpers import claim_one, fetch, new_task, sql, tx
 from .tool_helpers import HookedLLM, final, search, search_registry, tool_turn
 
@@ -118,7 +118,8 @@ def test_success_is_atomic_and_fully_recorded(
 
     assert [a.outcome for a in audit_rows(session_factory, "task.finish")] == ["success"]
     assert [a.outcome for a in audit_rows(session_factory, "assistant.ask")] == ["success"]
-    assert count(session_factory, UsageRecord) == 1
+    usage = usage_rows(session_factory)
+    assert len(usage) == 2 and {u.task_id for u in usage} == {task.id}  # one row per model call
 
 
 def test_continuing_a_conversation_sends_its_history(
@@ -177,7 +178,7 @@ def test_lease_stolen_during_the_model_call_writes_nothing(
         2,
         None,
     )
-    assert message_rows(session_factory) == [] and count(session_factory, UsageRecord) == 0
+    assert message_rows(session_factory) == [] and count(session_factory, UsageRecord) == 1
     assert audit_rows(session_factory, "task.finish") == []
 
 
@@ -230,7 +231,8 @@ def test_cancel_during_the_model_call_prevents_any_write(
     )
     with pytest.raises(TaskCancelled):
         _run(session_factory, task, llm)
-    assert message_rows(session_factory) == [] and count(session_factory, UsageRecord) == 0
+    assert message_rows(session_factory) == []
+    assert count(session_factory, UsageRecord) == 1  # the model call happened, so its tokens count
     assert fetch(session_factory, task.id).status == "cancel_requested"
 
 
@@ -360,3 +362,23 @@ def test_progress_events_are_fenced_too(alice: Seeded, session_factory: SessionF
         asyncio.run(ctx.emit("model_call", {"step": 1}))
     kinds = [e.event_type for e in _events(session_factory, task.id)]
     assert TaskEventType.PROGRESS.value not in kinds
+
+
+def test_failed_attempts_still_count_against_the_budget_across_retries(
+    alice_tools: Seeded, session_factory: SessionFactory
+) -> None:
+    first = _claimed(session_factory, alice_tools)
+    # Attempt 1: one model call succeeds (15 tokens), then the provider breaks.
+    broken = FakeLLMProvider(script=[tool_turn(search()), ProviderUnavailableError()])
+    with pytest.raises(ProviderUnavailableError):
+        _run(session_factory, first, broken, registry=search_registry(FakeSearchProvider()))
+    rows = usage_rows(session_factory)
+    assert len(rows) == 1 and (rows[0].input_tokens, rows[0].output_tokens) == (10, 5)
+    assert rows[0].task_id == first.id and rows[0].message_id is None
+
+    # The retry sees that spend and is refused once the daily budget is reached.
+    second = _claimed(session_factory, alice_tools)
+    untouched = FakeLLMProvider()
+    with pytest.raises(BudgetExceededError):
+        _run(session_factory, second, untouched, daily_token_budget=15)
+    assert untouched.calls == []

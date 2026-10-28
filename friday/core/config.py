@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     max_history_messages: int = Field(default=20, ge=0, le=100)
     daily_token_budget: int = Field(default=200_000, ge=1)
 
-    enabled_tools: str = "web_search"  # comma-separated kill switch
+    enabled_tools: str = "web_search,web_fetch"  # comma-separated kill switch
     search_provider: Literal["tavily"] = "tavily"
     search_api_key: SecretStr | None = None
     tool_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     search_max_results: int = Field(default=5, ge=1, le=5)
     search_daily_limit: int = Field(default=50, ge=1)
     ask_deadline_seconds: float = Field(default=60.0, gt=0, le=300)
+
+    fetch_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    fetch_daily_limit: int = Field(default=100, ge=1)
+    research_max_searches: int = Field(default=3, ge=1, le=10)
+    research_max_sources: int = Field(default=5, ge=1, le=10)
+    research_max_output_tokens: int = Field(default=3000, ge=256, le=16000)
+    research_deadline_seconds: float = Field(default=240.0, gt=0, le=290)
 
     task_worker_concurrency: int = Field(default=2, ge=1, le=32)
     task_poll_interval_seconds: float = Field(default=2.0, gt=0, le=60)

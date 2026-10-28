@@ -106,7 +106,11 @@ class TaskService:
         if task is None:
             raise NotFoundError
         answer = None
-        if task.status == TaskStatus.SUCCEEDED.value and task.result:
+        if (
+            task.type == TaskType.ASSISTANT_ASK
+            and task.status == TaskStatus.SUCCEEDED.value
+            and task.result
+        ):
             message = await self._conversations.get_message_owned(
                 uuid.UUID(task.result["message_id"]), user.user_id
             )

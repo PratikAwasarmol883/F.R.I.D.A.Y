@@ -6,14 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from friday.adapters.llm import LLMProvider
 from friday.core.config import Settings
-from friday.domain.exceptions import DeviceRevokedError, InvalidTaskInputError
+from friday.domain.exceptions import InvalidTaskInputError
 from friday.domain.task_inputs import AskTaskInput
 from friday.domain.task_state import TaskType
 from friday.orchestration.tool_registry import ToolRegistry
-from friday.persistence.repositories.devices import DeviceRepository
 from friday.services.assistant_service import AskHooks, AskResult, AssistantService
-from friday.services.auth_service import CurrentUser
 from friday.workers.context import TaskContext
+from friday.workers.handlers.common import load_current_user
 
 
 def result_json(result: AskResult) -> dict[str, Any]:
@@ -47,7 +46,7 @@ class AssistantAskHandler:
             data = AskTaskInput.model_validate(ctx.task_input)
         except ValidationError as exc:
             raise InvalidTaskInputError from exc
-        user = await self._current_user(ctx)
+        user = await load_current_user(ctx, self._session_factory)
         llm = self._llm_factory()
         registry = self._registry_factory()
 
@@ -64,13 +63,3 @@ class AssistantAskHandler:
         async with self._session_factory() as session:
             service = AssistantService(session, llm, self._settings, registry)
             await service.ask(user, data.message, data.conversation_id, hooks)
-
-    async def _current_user(self, ctx: TaskContext) -> CurrentUser:
-        """Tasks run with the creating device's *current* state, never a snapshot."""
-        async with self._session_factory() as session:
-            device = await DeviceRepository(session).get(ctx.device_id) if ctx.device_id else None
-        if device is None or device.revoked_at is not None or device.user_id != ctx.user_id:
-            raise DeviceRevokedError
-        return CurrentUser(
-            user_id=ctx.user_id, device_id=device.id, scopes=frozenset(device.scopes)
-        )

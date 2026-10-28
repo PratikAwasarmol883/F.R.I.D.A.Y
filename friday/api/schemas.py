@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
-from friday.domain.task_inputs import MAX_MESSAGE_CHARS, AskTaskInput  # noqa: F401
+from friday.domain.task_inputs import MAX_MESSAGE_CHARS, AskTaskInput, ResearchTaskInput  # noqa: F401
 
 
 class StrictModel(BaseModel):
@@ -99,6 +99,12 @@ class TaskResultOut(BaseModel):
     tools_used: list[ToolUseOut] = []
 
 
+class ResearchResultOut(BaseModel):
+    report_id: uuid.UUID
+    usage: Usage
+    sources_count: int
+
+
 class TaskOut(BaseModel):
     id: uuid.UUID
     type: str
@@ -111,7 +117,7 @@ class TaskOut(BaseModel):
     cancel_requested: bool
     error_code: str | None
     error_message: str | None
-    result: TaskResultOut | None
+    result: TaskResultOut | ResearchResultOut | None
 
 
 class TaskEventOut(BaseModel):
@@ -124,3 +130,37 @@ class TaskEventOut(BaseModel):
 class TaskEventsOut(BaseModel):
     events: list[TaskEventOut]
     next_after_sequence: int
+
+
+class ReportSourceRef(BaseModel):
+    key: str
+    url: str
+    title: str
+    retrieved_at: datetime
+
+
+class ReportSourceOut(ReportSourceRef):
+    content_hash: str
+
+
+class ReportFindingOut(BaseModel):
+    claim: str
+    confidence: str
+    sources: list[ReportSourceRef]
+
+
+class ReportConflictOut(BaseModel):
+    description: str
+    sources: list[ReportSourceRef]
+
+
+class ReportOut(BaseModel):
+    id: uuid.UUID
+    question: str
+    created_at: datetime
+    summary: str
+    findings: list[ReportFindingOut]
+    conflicts: list[ReportConflictOut]
+    limitations: list[str]
+    sources: list[ReportSourceOut]
+    markdown: str

@@ -97,6 +97,10 @@ class Tool(ABC, Generic[InputT, OutputT]):
         """Tool-specific semantic check run by policy; return a reason code to reject."""
         return None
 
+    def redact_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Tool-specific masking applied before arguments are stored (e.g. URL query strings)."""
+        return arguments
+
     def summarize(self, output: OutputT) -> ToolSummary:
         """Metadata for audit rows and client-visible sources; default exposes nothing."""
         return ToolSummary()

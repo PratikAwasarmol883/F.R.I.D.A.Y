@@ -6,6 +6,7 @@ from enum import StrEnum
 from friday.domain.exceptions import (
     BudgetExceededError,
     DeviceRevokedError,
+    ForbiddenError,
     InvalidTaskInputError,
     NotFoundError,
     ProviderError,
@@ -16,6 +17,7 @@ from friday.domain.exceptions import (
 
 class TaskType(StrEnum):
     ASSISTANT_ASK = "assistant.ask"
+    RESEARCH = "research.run"
 
 
 class TaskStatus(StrEnum):
@@ -96,6 +98,7 @@ class TaskErrorCode(StrEnum):
     INVALID_INPUT = "invalid_input"
     TIMED_OUT = "timed_out"
     WORKER_LOST = "worker_lost"
+    FORBIDDEN = "forbidden"
     INTERNAL_ERROR = "internal_error"
 
 
@@ -117,6 +120,7 @@ SAFE_MESSAGES: dict[TaskErrorCode, str] = {
     TaskErrorCode.INVALID_INPUT: "The task input is invalid.",
     TaskErrorCode.TIMED_OUT: "The task exceeded its time limit.",
     TaskErrorCode.WORKER_LOST: "The worker running this task stopped responding.",
+    TaskErrorCode.FORBIDDEN: "The device is not permitted to run this task.",
     TaskErrorCode.INTERNAL_ERROR: "An unexpected error occurred.",
 }
 
@@ -137,6 +141,8 @@ def error_code_for(exc: BaseException) -> TaskErrorCode:
         return TaskErrorCode.DEVICE_REVOKED
     if isinstance(exc, InvalidTaskInputError):
         return TaskErrorCode.INVALID_INPUT
+    if isinstance(exc, ForbiddenError):
+        return TaskErrorCode.FORBIDDEN
     return TaskErrorCode.INTERNAL_ERROR
 
 

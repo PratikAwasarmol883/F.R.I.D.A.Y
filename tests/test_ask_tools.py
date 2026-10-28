@@ -95,8 +95,10 @@ def test_end_to_end_tool_use_is_persisted_audited_and_sourced(
 
         return list((await session.scalars(select(UsageRecord))).all())
 
-    [record] = run_db(session_factory, usage)
-    assert (record.input_tokens, record.output_tokens) == (20, 10)
+    records = run_db(session_factory, usage)  # one row per model call (tool turn + final answer)
+    assert len(records) == 2
+    assert (sum(r.input_tokens for r in records), sum(r.output_tokens for r in records)) == (20, 10)
+    assert {str(r.message_id) for r in records} == {body["message_id"]}
 
 
 def test_tool_traces_are_not_replayed_in_later_turns(make_client: Any, alice_tools: Seeded) -> None:

@@ -51,12 +51,13 @@ def new_task(
     message: str = "hello",
     max_attempts: int = 3,
     task_input: dict[str, Any] | None = None,
+    task_type: str = "assistant.ask",
 ) -> Task:
     async def create(repo: TaskRepository) -> Task:
         task, _ = await repo.create(
             user_id=who.user_id,
             device_id=who.device_id,
-            task_type="assistant.ask",
+            task_type=task_type,
             task_input=task_input or {"message": message, "conversation_id": None},
             idempotency_key=key,
             fingerprint=uuid.uuid4().hex * 2,
