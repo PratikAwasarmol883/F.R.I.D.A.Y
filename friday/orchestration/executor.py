@@ -5,7 +5,7 @@ import json
 import random
 import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -101,6 +101,10 @@ def _hash(arguments: Any) -> str:
     return hash_arguments(arguments if isinstance(arguments, dict) else {"value": str(arguments)})
 
 
+EventCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
+CancelCheck = Callable[[], Awaitable[None]]
+
+
 class ToolLoop:
     def __init__(
         self,
@@ -114,6 +118,8 @@ class ToolLoop:
         deadline_seconds: float,
         check_budget: Callable[[int], None],
         retry_backoff: tuple[float, float] = (0.1, 0.3),
+        on_event: EventCallback | None = None,
+        check_cancelled: CancelCheck | None = None,
     ) -> None:
         self._llm = llm
         self._registry = registry
@@ -124,6 +130,16 @@ class ToolLoop:
         self._deadline = deadline_seconds
         self._check_budget = check_budget
         self._backoff = retry_backoff
+        self._on_event = on_event
+        self._check_cancelled = check_cancelled
+
+    async def _checkpoint(self) -> None:
+        if self._check_cancelled is not None:
+            await self._check_cancelled()
+
+    async def _emit(self, event_type: str, payload: dict[str, Any]) -> None:
+        if self._on_event is not None:
+            await self._on_event(event_type, payload)
 
     async def run(
         self, history: Sequence[LLMMessage], user_message: str, ctx: PolicyContext
@@ -151,8 +167,10 @@ class ToolLoop:
         max_calls = ctx.max_total_calls_per_ask if specs else 0
 
         for iteration in range(max_calls + 1):
+            await self._checkpoint()
             self._check_budget(tokens_in + tokens_out)
             final_turn = iteration == max_calls
+            await self._emit("model_call", {"call": iteration + 1})
             result = await self._llm.complete(
                 system=self._system,
                 messages=messages,
@@ -185,6 +203,7 @@ class ToolLoop:
                 tool_result, use, found, execution_id = await self._handle_call(call, ctx)
                 results.append(tool_result)
                 uses.append(use)
+                await self._emit("tool_call", {"tool": use.name, "status": use.status.value})
                 execution_ids.append(execution_id)
                 for source in found:
                     if all(source.url != existing.url for existing in sources):
@@ -197,6 +216,7 @@ class ToolLoop:
     async def _handle_call(
         self, call: ToolCall, ctx: PolicyContext
     ) -> tuple[ToolResult, ToolUse, tuple[Source, ...], uuid.UUID]:
+        await self._checkpoint()  # never start a tool call after cancellation
         name = safe_tool_name(call.name)
         decision = evaluate(self._registry, call.name, call.arguments, ctx)
         if isinstance(decision, Deny):

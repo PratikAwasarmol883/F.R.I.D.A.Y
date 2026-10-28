@@ -25,6 +25,7 @@ class ToolExecution(Base):
         Index("ix_tool_executions_user_id_created_at", "user_id", "created_at"),
         Index("ix_tool_executions_tool_name_created_at", "tool_name", "created_at"),
         Index("ix_tool_executions_conversation_id", "conversation_id"),
+        Index("ix_tool_executions_task_id", "task_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -38,6 +39,7 @@ class ToolExecution(Base):
     message_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("messages.id", ondelete="SET NULL")
     )
+    task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
     tool_name: Mapped[str] = mapped_column(String(64))
     tool_version: Mapped[str] = mapped_column(String(16))
     risk_class: Mapped[str | None] = mapped_column(String(24))  # NULL for unregistered names

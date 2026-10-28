@@ -1,3 +1,23 @@
+x-friday-env: &friday-env
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-claude-haiku-5-5}
+  DAILY_TOKEN_BUDGET: ${DAILY_TOKEN_BUDGET:-200000}
+  SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+  ENABLED_TOOLS: ${ENABLED_TOOLS:-web_search}
+  MAX_ACTIVE_TASKS_PER_USER: ${MAX_ACTIVE_TASKS_PER_USER:-5}
+  TASK_WORKER_CONCURRENCY: ${TASK_WORKER_CONCURRENCY:-2}
+  TASK_POLL_INTERVAL_SECONDS: ${TASK_POLL_INTERVAL_SECONDS:-2}
+  TASK_LEASE_SECONDS: ${TASK_LEASE_SECONDS:-60}
+  TASK_HEARTBEAT_SECONDS: ${TASK_HEARTBEAT_SECONDS:-10}
+  TASK_MAX_ATTEMPTS: ${TASK_MAX_ATTEMPTS:-3}
+  TASK_MAX_RUNTIME_SECONDS: ${TASK_MAX_RUNTIME_SECONDS:-300}
+  TASK_RETRY_BASE_SECONDS: ${TASK_RETRY_BASE_SECONDS:-5}
+  TASK_RETRY_MAX_SECONDS: ${TASK_RETRY_MAX_SECONDS:-120}
+  TASK_RETENTION_DAYS: ${TASK_RETENTION_DAYS:-30}
+  TASK_SHUTDOWN_GRACE_SECONDS: ${TASK_SHUTDOWN_GRACE_SECONDS:-30}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-friday_user}:${POSTGRES_PASSWORD:-friday_password}@friday-db:5432/${POSTGRES_DB:-friday_db}
+
 services:
   friday-db:
     image: postgres:16-alpine
@@ -17,19 +37,24 @@ services:
 
   friday-api:
     build: .
-    environment:
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-claude-haiku-5-5}
-      DAILY_TOKEN_BUDGET: ${DAILY_TOKEN_BUDGET:-200000}
-      SEARCH_API_KEY: ${SEARCH_API_KEY:-}
-      ENABLED_TOOLS: ${ENABLED_TOOLS:-web_search}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-friday_user}:${POSTGRES_PASSWORD:-friday_password}@friday-db:5432/${POSTGRES_DB:-friday_db}
+    environment: *friday-env
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
       friday-db:
         condition: service_healthy
+
+  friday-worker:
+    build: .
+    command: ["python", "-m", "friday.worker"]
+    environment: *friday-env
+    depends_on:
+      friday-db:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 45s  # longer than TASK_SHUTDOWN_GRACE_SECONDS so tasks can finish or release
+    healthcheck:
+      disable: true  # the image's HTTP healthcheck is for the API only
 
 volumes:
   friday-postgres-data:

@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from friday.core.request_context import request_id_var
 from friday.domain.enums import DeviceType
 from friday.domain.exceptions import DomainError
+from friday.domain.task_state import InvalidTransitionError, TaskStatus
 from friday.persistence.database import get_engine, get_sessionmaker
+from friday.persistence.repositories.tasks import TaskRepository
 from friday.persistence.repositories.tool_executions import ToolExecutionRepository
 from friday.services.auth_service import AuthService
 
@@ -38,6 +40,14 @@ def _build_parser() -> argparse.ArgumentParser:
     set_scopes.add_argument("--device-id", type=uuid.UUID, required=True)
     set_scopes.add_argument("--scopes", default="", help="Comma-separated; empty clears all")
 
+    tasks = sub.add_parser("tasks", help="List a user's recent tasks (no input text)")
+    tasks.add_argument("--user-id", type=uuid.UUID, required=True)
+    tasks.add_argument("--status", type=TaskStatus, choices=list(TaskStatus))
+    tasks.add_argument("--limit", type=int, default=20)
+
+    requeue = sub.add_parser("requeue-task", help="Re-run a failed or timed-out task")
+    requeue.add_argument("--task-id", type=uuid.UUID, required=True)
+
     tool_log = sub.add_parser("tool-log", help="Show recent tool executions for a user")
     tool_log.add_argument("--user-id", type=uuid.UUID, required=True)
     tool_log.add_argument("--limit", type=int, default=20)
@@ -62,6 +72,19 @@ async def _run(args: argparse.Namespace, session: AsyncSession) -> None:
     elif args.command == "set-device-scopes":
         device = await auth.set_device_scopes(args.device_id, _split_scopes(args.scopes))
         print(f"scopes={','.join(device.scopes)}")
+    elif args.command == "tasks":
+        rows = await TaskRepository(session).list_for_user(
+            args.user_id, args.status, max(1, min(args.limit, 200))
+        )
+        for task in rows:
+            print(
+                f"{task.id} {task.type} {task.status} attempt={task.attempt}/{task.max_attempts} "
+                f"error={task.error_code or '-'} created={task.created_at.isoformat()}"
+            )
+    elif args.command == "requeue-task":
+        task = await TaskRepository(session).requeue_by_operator(args.task_id)
+        await session.commit()
+        print(f"requeued={task.id}")
     elif args.command == "tool-log":
         for row in await ToolExecutionRepository(session).recent_for_user(
             args.user_id, max(1, min(args.limit, 200))
@@ -93,7 +116,7 @@ def main(
 
     try:
         asyncio.run(runner())
-    except (DomainError, ValueError) as exc:
+    except (DomainError, ValueError, InvalidTransitionError) as exc:
         print(f"error: {type(exc).__name__}: {exc}".rstrip(": "), file=sys.stderr)
         return 1
     return 0

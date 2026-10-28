@@ -118,3 +118,31 @@ def make_loop(
     }
     params.update(overrides)
     return ToolLoop(llm, registry, recorder, **params)
+
+
+class HookedLLM(FakeLLMProvider):
+    """Fake model that runs a callback at the start of each call (to change DB state mid-run)."""
+
+    def __init__(self, on_call: Any, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.on_call = on_call
+
+    async def complete(  # type: ignore[override]
+        self,
+        *,
+        system: str,
+        messages: Sequence[LLMMessage],
+        max_output_tokens: int,
+        timeout_seconds: float,
+        tools: Sequence[ToolSpec] = (),
+        tool_choice: Literal["auto", "none"] = "auto",
+    ) -> LLMResult:
+        self.on_call(len(self.requests))
+        return await super().complete(
+            system=system,
+            messages=messages,
+            max_output_tokens=max_output_tokens,
+            timeout_seconds=timeout_seconds,
+            tools=tools,
+            tool_choice=tool_choice,
+        )

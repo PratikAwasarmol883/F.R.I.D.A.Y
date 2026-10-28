@@ -2,11 +2,11 @@
 
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
-MAX_MESSAGE_CHARS = 8000
+from friday.domain.task_inputs import MAX_MESSAGE_CHARS, AskTaskInput  # noqa: F401
 
 
 class StrictModel(BaseModel):
@@ -80,3 +80,47 @@ class AskResponse(BaseModel):
     usage: Usage
     sources: list[SourceOut] = []
     tools_used: list[ToolUseOut] = []
+
+
+class AskTaskCreate(StrictModel):
+    type: Literal["assistant.ask"]
+    input: AskTaskInput
+
+
+TaskCreate = AskTaskCreate  # becomes a discriminated union as task types are added
+
+
+class TaskResultOut(BaseModel):
+    conversation_id: uuid.UUID
+    message_id: uuid.UUID
+    answer: str | None
+    usage: Usage
+    sources: list[SourceOut] = []
+    tools_used: list[ToolUseOut] = []
+
+
+class TaskOut(BaseModel):
+    id: uuid.UUID
+    type: str
+    status: str
+    attempt: int
+    max_attempts: int
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    cancel_requested: bool
+    error_code: str | None
+    error_message: str | None
+    result: TaskResultOut | None
+
+
+class TaskEventOut(BaseModel):
+    sequence: int
+    event_type: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+
+class TaskEventsOut(BaseModel):
+    events: list[TaskEventOut]
+    next_after_sequence: int

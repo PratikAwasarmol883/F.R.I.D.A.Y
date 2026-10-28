@@ -50,3 +50,7 @@ select = ["E", "W", "F", "I", "UP", "B", "C4"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test lambdas run immediately inside each loop iteration, so late binding cannot bite.
+"tests/**" = ["B023"]

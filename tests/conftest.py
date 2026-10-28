@@ -26,7 +26,7 @@ from friday.services.auth_service import AuthService
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_DB = "friday_test"
-TABLES = "users, devices, conversations, messages, usage_records, audit_events"
+TABLES = "users, devices, conversations, messages, usage_records, audit_events, tasks, task_events"
 T = TypeVar("T")
 
 SessionFactory = async_sessionmaker[AsyncSession]

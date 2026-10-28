@@ -1,7 +1,9 @@
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +45,17 @@ SYSTEM_PROMPT_WITH_TOOLS = _BASE_PROMPT + (
 
 
 @dataclass(frozen=True)
+class AskHooks:
+    """Optional integration points used by background tasks; the synchronous route passes none."""
+
+    task_id: uuid.UUID | None = None
+    progress: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None
+    check_cancelled: Callable[[], Awaitable[None]] | None = None
+    lock_for_finish: Callable[[AsyncSession], Awaitable[None]] | None = None
+    finish: Callable[[AsyncSession, "AskResult"], Awaitable[None]] | None = None
+
+
+@dataclass(frozen=True)
 class AskResult:
     conversation_id: uuid.UUID
     message_id: uuid.UUID
@@ -75,7 +88,11 @@ class AssistantService:
         self._audit = AuditRepository(session)
 
     async def ask(
-        self, user: CurrentUser, message: str, conversation_id: uuid.UUID | None
+        self,
+        user: CurrentUser,
+        message: str,
+        conversation_id: uuid.UUID | None,
+        hooks: AskHooks | None = None,
     ) -> AskResult:
         history = await self._load_history(user, conversation_id)
         started = time.perf_counter()
@@ -87,7 +104,9 @@ class AssistantService:
             loop = ToolLoop(
                 self._llm,
                 self._registry,
-                DbExecutionRecorder(self._session, user, conversation_id),
+                DbExecutionRecorder(
+                    self._session, user, conversation_id, hooks.task_id if hooks else None
+                ),
                 system_prompt=(
                     SYSTEM_PROMPT_WITH_TOOLS
                     if advertised_tools(self._registry, ctx)
@@ -97,6 +116,8 @@ class AssistantService:
                 llm_timeout_seconds=self._settings.llm_timeout_seconds,
                 deadline_seconds=self._settings.ask_deadline_seconds,
                 check_budget=lambda spent: self._check_budget(baseline, spent),
+                on_event=hooks.progress if hooks else None,
+                check_cancelled=hooks.check_cancelled if hooks else None,
             )
             result = await loop.run(history, message, ctx)
         except (BudgetExceededError, ProviderError) as exc:
@@ -104,6 +125,8 @@ class AssistantService:
             raise
         latency_ms = int((time.perf_counter() - started) * 1000)
 
+        if hooks and hooks.lock_for_finish:
+            await hooks.lock_for_finish(self._session)  # fence + cancel check before any write
         conversation = await self._write_conversation(user, conversation_id)
         sequence = await self._conversations.next_sequence(conversation.id)
         await self._conversations.add_message(conversation.id, sequence, MessageRole.USER, message)
@@ -131,6 +154,17 @@ class AssistantService:
             target_type="conversation",
             target_id=str(conversation.id),
         )
+        ask_result = AskResult(
+            conversation_id=conversation.id,
+            message_id=reply.id,
+            answer=result.text,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            sources=result.sources,
+            tools_used=result.tools_used,
+        )
+        if hooks and hooks.finish:
+            await hooks.finish(self._session, ask_result)  # same transaction as the answer
         await self._session.commit()
 
         logger.info(
@@ -146,15 +180,7 @@ class AssistantService:
                 "outcome": "success",
             },
         )
-        return AskResult(
-            conversation_id=conversation.id,
-            message_id=reply.id,
-            answer=result.text,
-            input_tokens=result.input_tokens,
-            output_tokens=result.output_tokens,
-            sources=result.sources,
-            tools_used=result.tools_used,
-        )
+        return ask_result
 
     async def _load_history(
         self, user: CurrentUser, conversation_id: uuid.UUID | None

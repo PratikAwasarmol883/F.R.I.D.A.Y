@@ -33,6 +33,11 @@ class DeviceRepository:
         await self._session.flush()
         return device
 
+    async def get(self, device_id: uuid.UUID) -> Device | None:
+        return await self._session.scalar(
+            select(Device).where(Device.id == device_id).execution_options(populate_existing=True)
+        )
+
     async def get_active_by_token_hash(self, token_hash: str) -> Device | None:
         stmt = select(Device).where(Device.token_hash == token_hash, Device.revoked_at.is_(None))
         return await self._session.scalar(stmt)

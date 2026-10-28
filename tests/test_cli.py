@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -7,7 +9,7 @@ from friday import cli
 from friday.core.security import hash_token
 from friday.persistence.models import Device
 
-from .conftest import SessionFactory, run_db
+from .conftest import Seeded, SessionFactory, run_db
 from .helpers import audit_rows
 
 
@@ -59,3 +61,38 @@ def test_cli_rejects_bad_input(
     args = ["register-device", "--user-id", unknown_user, "--name", "d", "--type", "cli"]
     assert cli.main(args, session_factory) == 1
     assert "token=" not in capsys.readouterr().out
+
+
+def test_tasks_listing_hides_input_and_requeue_only_accepts_failed_tasks(
+    alice: Seeded, session_factory: SessionFactory, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from friday.domain.task_state import TaskErrorCode, TaskStatus
+
+    from .task_helpers import claim_one, new_task, tx
+
+    failed = new_task(session_factory, alice, message="PRIVATEINPUT")
+    queued = new_task(session_factory, alice)
+    claim_one(session_factory)
+    tx(
+        session_factory,
+        lambda r: r.finish(
+            failed.id, "w1", 1, TaskStatus.FAILED, error_code=TaskErrorCode.PROVIDER_ERROR
+        ),
+    )
+
+    assert cli.main(["tasks", "--user-id", str(alice.user_id)], session_factory) == 0
+    listing = capsys.readouterr().out
+    assert "PRIVATEINPUT" not in listing
+    assert f"{failed.id} assistant.ask failed attempt=1/3 error=provider_error" in listing
+    assert f"{queued.id} assistant.ask queued" in listing
+
+    only_failed = ["tasks", "--user-id", str(alice.user_id), "--status", "failed"]
+    assert cli.main(only_failed, session_factory) == 0
+    assert str(queued.id) not in capsys.readouterr().out
+
+    assert cli.main(["requeue-task", "--task-id", str(failed.id)], session_factory) == 0
+    assert f"requeued={failed.id}" in capsys.readouterr().out
+    assert (
+        cli.main(["requeue-task", "--task-id", str(failed.id)], session_factory) == 1
+    )  # queued now
+    assert cli.main(["requeue-task", "--task-id", str(uuid.uuid4())], session_factory) == 1

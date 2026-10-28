@@ -8,11 +8,14 @@ from friday.core.request_context import request_id_var
 from friday.domain.exceptions import (
     BudgetExceededError,
     DomainError,
+    IdempotencyConflictError,
     NotAuthenticatedError,
     NotFoundError,
     ProviderError,
     ProviderTimeoutError,
     ProviderUnavailableError,
+    TaskLimitError,
+    TaskNotCancellableError,
 )
 
 # Most specific first: ProviderError is the base of the other two provider errors.
@@ -20,6 +23,14 @@ _DOMAIN_ERRORS: list[tuple[type[DomainError], int, str, str]] = [
     (NotAuthenticatedError, 401, "UNAUTHENTICATED", "Authentication is required or invalid."),
     (NotFoundError, 404, "NOT_FOUND", "Resource not found."),
     (BudgetExceededError, 429, "BUDGET_EXCEEDED", "The daily usage budget has been reached."),
+    (TaskLimitError, 429, "TASK_LIMIT", "Too many active tasks; wait for one to finish."),
+    (
+        IdempotencyConflictError,
+        409,
+        "IDEMPOTENCY_CONFLICT",
+        "This idempotency key was already used with a different request.",
+    ),
+    (TaskNotCancellableError, 409, "TASK_NOT_CANCELLABLE", "The task has already finished."),
     (ProviderTimeoutError, 504, "PROVIDER_TIMEOUT", "The assistant took too long to respond."),
     (
         ProviderUnavailableError,

@@ -51,6 +51,26 @@ python -m friday.cli tool-log --user-id <user_id> --limit 20                    
 Search results are treated as untrusted data; every tool call is validated, scoped, bounded, and
 recorded in `tool_executions` (arguments redacted, result bodies not stored).
 
+### Background tasks (Milestone 3)
+
+Long-running work runs in a separate worker process that survives client disconnects and crashes.
+
+```bash
+docker compose up -d --build      # API + worker + database (or run `python -m friday.worker` yourself)
+
+curl -X POST http://127.0.0.1:8000/api/v1/tasks \
+  -H "Authorization: Bearer <token>" -H "Idempotency-Key: my-request-1" -H "content-type: application/json" \
+  -d '{"type": "assistant.ask", "input": {"message": "Summarize FastAPI lifespan events"}}'   # 202 + task id
+curl http://127.0.0.1:8000/api/v1/tasks/<task_id>          -H "Authorization: Bearer <token>"   # status/result
+curl http://127.0.0.1:8000/api/v1/tasks/<task_id>/events   -H "Authorization: Bearer <token>"   # progress
+curl -X POST http://127.0.0.1:8000/api/v1/tasks/<task_id>/cancel -H "Authorization: Bearer <token>"
+```
+
+- Repeating a request with the same `Idempotency-Key` returns the same task (200); a different payload with that key is `409`.
+- Tasks are retried with backoff only for provider outages; a worker that dies is recovered when its lease expires.
+- Tasks run with the creating device's *current* scopes; revoking the device cancels its queued work.
+- Operators: `python -m friday.cli tasks --user-id <id> [--status failed]` and `requeue-task --task-id <id>`.
+
 Tests use a separate `friday_test` database on the same Postgres server (created automatically), so
 `docker compose up -d friday-db` must be running. `tests/test_provider_smoke.py` and `tests/test_tools_smoke.py` call real
 services only when `ANTHROPIC_API_KEY` (and `SEARCH_API_KEY` for the tools test) are set.

@@ -78,3 +78,11 @@ class ConversationRepository:
             .where(Conversation.id == conversation_id)
             .values(updated_at=func.now())
         )
+
+    async def get_message_owned(self, message_id: uuid.UUID, user_id: uuid.UUID) -> Message | None:
+        stmt = (
+            select(Message)
+            .join(Conversation, Conversation.id == Message.conversation_id)
+            .where(Message.id == message_id, Conversation.user_id == user_id)
+        )
+        return await self._session.scalar(stmt)

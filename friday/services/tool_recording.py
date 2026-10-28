@@ -20,11 +20,16 @@ class DbExecutionRecorder:
     """Commits each execution immediately so audit survives a later failure in the same ask."""
 
     def __init__(
-        self, session: AsyncSession, user: CurrentUser, conversation_id: uuid.UUID | None
+        self,
+        session: AsyncSession,
+        user: CurrentUser,
+        conversation_id: uuid.UUID | None,
+        task_id: uuid.UUID | None = None,
     ) -> None:
         self._session = session
         self._user = user
         self._conversation_id = conversation_id
+        self._task_id = task_id
         self._executions = ToolExecutionRepository(session)
         self._audit = AuditRepository(session)
 
@@ -33,6 +38,7 @@ class DbExecutionRecorder:
             user_id=self._user.user_id,
             device_id=self._user.device_id,
             conversation_id=self._conversation_id,
+            task_id=self._task_id,
             tool_name=entry.tool_name,
             tool_version=entry.tool_version,
             risk_class=entry.risk_class,

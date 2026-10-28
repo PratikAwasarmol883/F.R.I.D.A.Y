@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,26 @@ class Settings(BaseSettings):
     search_max_results: int = Field(default=5, ge=1, le=5)
     search_daily_limit: int = Field(default=50, ge=1)
     ask_deadline_seconds: float = Field(default=60.0, gt=0, le=300)
+
+    task_worker_concurrency: int = Field(default=2, ge=1, le=32)
+    task_poll_interval_seconds: float = Field(default=2.0, gt=0, le=60)
+    task_lease_seconds: float = Field(default=60.0, gt=0, le=3600)
+    task_heartbeat_seconds: float = Field(default=10.0, gt=0, le=600)
+    task_max_attempts: int = Field(default=3, ge=1, le=10)
+    task_max_runtime_seconds: int = Field(default=300, ge=1, le=3600)
+    task_retry_base_seconds: float = Field(default=5.0, gt=0, le=3600)
+    task_retry_max_seconds: float = Field(default=120.0, gt=0, le=86400)
+    max_active_tasks_per_user: int = Field(default=5, ge=1, le=100)
+    task_retention_days: int = Field(default=30, ge=1, le=3650)
+    task_shutdown_grace_seconds: float = Field(default=30.0, ge=0, le=300)
+
+    @model_validator(mode="after")
+    def _lease_outlives_heartbeat(self) -> "Settings":
+        if self.task_lease_seconds <= 2 * self.task_heartbeat_seconds:
+            raise ValueError("TASK_LEASE_SECONDS must be greater than 2x TASK_HEARTBEAT_SECONDS")
+        if self.task_retry_max_seconds < self.task_retry_base_seconds:
+            raise ValueError("TASK_RETRY_MAX_SECONDS must be >= TASK_RETRY_BASE_SECONDS")
+        return self
 
     @property
     def anthropic_key_configured(self) -> bool:

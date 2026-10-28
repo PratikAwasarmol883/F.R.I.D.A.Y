@@ -24,3 +24,23 @@ class ProviderTimeoutError(ProviderError):
 
 class ProviderUnavailableError(ProviderError):
     """The LLM provider is rate-limited, overloaded, unreachable, or not configured."""
+
+
+class TaskLimitError(DomainError):
+    """The user already has the maximum number of active tasks."""
+
+
+class IdempotencyConflictError(DomainError):
+    """An idempotency key was reused with a different request."""
+
+
+class TaskNotCancellableError(DomainError):
+    """The task is already in a terminal state other than cancelled."""
+
+
+class DeviceRevokedError(DomainError):
+    """The device that created a task is revoked or gone."""
+
+
+class InvalidTaskInputError(DomainError):
+    """A stored task input no longer validates."""
