@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     max_history_messages: int = Field(default=20, ge=0, le=100)
     daily_token_budget: int = Field(default=200_000, ge=1)
 
-    enabled_tools: str = "web_search,web_fetch"  # comma-separated kill switch
+    enabled_tools: str = "web_search,web_fetch,remember"  # comma-separated kill switch
     search_provider: Literal["tavily"] = "tavily"
     search_api_key: SecretStr | None = None
     tool_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
@@ -43,6 +43,17 @@ class Settings(BaseSettings):
     voice_daily_limit: int = Field(default=100, ge=1)
     voice_tts_max_chars: int = Field(default=1500, ge=50, le=4000)
     voice_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+
+    memory_enabled: bool = True
+    memory_in_prompt: bool = True
+    memory_max_notes: int = Field(default=200, ge=1, le=10_000)
+    memory_max_pending: int = Field(default=20, ge=1, le=1_000)
+    memory_prompt_max_notes: int = Field(default=8, ge=1, le=50)
+    memory_prompt_max_chars: int = Field(default=1500, ge=100, le=20_000)
+
+    max_schedules_per_user: int = Field(default=10, ge=1, le=1_000)
+    schedule_grace_seconds: float = Field(default=3600.0, ge=0, le=86_400)
+    scheduler_batch: int = Field(default=20, ge=1, le=500)
 
     fetch_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     fetch_daily_limit: int = Field(default=100, ge=1)

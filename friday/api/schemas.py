@@ -4,8 +4,16 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
+from friday.domain.schedule import ScheduleSpec, parse_timezone
 from friday.domain.task_inputs import MAX_MESSAGE_CHARS, AskTaskInput, ResearchTaskInput  # noqa: F401
 
 
@@ -181,3 +189,108 @@ class ReportOut(BaseModel):
     limitations: list[str]
     sources: list[ReportSourceOut]
     markdown: str
+
+
+class MemoryCreate(StrictModel):
+    kind: Literal["preference", "fact", "project", "note"]
+    value: str
+
+
+class MemoryUpdate(StrictModel):
+    kind: Literal["preference", "fact", "project", "note"] | None = None
+    value: str | None = None
+
+
+class MemoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: str
+    value: str
+    status: str
+    source: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MemoryExport(BaseModel):
+    exported_at: datetime
+    memories: list[MemoryOut]
+
+
+class ScheduledAskInput(AskTaskInput):
+    conversation_id: None = None  # each run starts its own conversation
+
+
+class AskScheduleTask(StrictModel):
+    type: Literal["assistant.ask"]
+    input: ScheduledAskInput
+
+
+class ResearchScheduleTask(StrictModel):
+    type: Literal["research.run"]
+    input: ResearchTaskInput
+
+
+ScheduleTask = Annotated[AskScheduleTask | ResearchScheduleTask, Field(discriminator="type")]
+ScheduleName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
+]
+
+
+def _check_timezone(value: str | None) -> str | None:
+    if value is not None:
+        parse_timezone(value)
+    return value
+
+
+class ScheduleCreate(StrictModel):
+    name: ScheduleName
+    task: ScheduleTask
+    schedule: ScheduleSpec
+    timezone: str
+    enabled: bool = True
+
+    _zone = field_validator("timezone")(_check_timezone)
+
+
+class ScheduleUpdate(StrictModel):
+    name: ScheduleName | None = None
+    enabled: bool | None = None
+    schedule: ScheduleSpec | None = None
+    timezone: str | None = None
+
+    _zone = field_validator("timezone")(_check_timezone)
+
+    @model_validator(mode="after")
+    def _something_to_change(self) -> "ScheduleUpdate":
+        if all(v is None for v in (self.name, self.enabled, self.schedule, self.timezone)):
+            raise ValueError("nothing to update")
+        return self
+
+
+class ScheduleTaskOut(BaseModel):
+    type: str
+    input: dict[str, Any]
+
+
+class ScheduleOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    task: ScheduleTaskOut
+    schedule: ScheduleSpec
+    timezone: str
+    enabled: bool
+    next_run_at: datetime
+    last_run_at: datetime | None
+    last_task_id: uuid.UUID | None
+    created_at: datetime
+
+
+class ScheduleRunOut(BaseModel):
+    task_id: uuid.UUID
+    status: str
+    scheduled_for: datetime | None
+    finished_at: datetime | None
+    error_code: str | None
+    result: dict[str, Any] | None

@@ -40,12 +40,16 @@ def drive(
     *,
     settings: Settings | None = None,
     workers: int = 1,
+    scheduler: Any = None,
 ) -> list[Worker]:
     """Run worker loop(s) while `scenario` observes and pokes at the system, then stop them."""
 
     async def main() -> list[Worker]:
         cfg = settings or settings_for()
-        pool = [Worker(factory, cfg, handlers, worker_id=f"w{i}") for i in range(workers)]
+        pool = [
+            Worker(factory, cfg, handlers, worker_id=f"w{i}", scheduler=scheduler)
+            for i in range(workers)
+        ]
         loops = [asyncio.create_task(w.run()) for w in pool]
         try:
             await scenario(pool)

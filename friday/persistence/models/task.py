@@ -34,6 +34,13 @@ class Task(Base):
         ),
         Index("ix_tasks_user_id_created_at", "user_id", "created_at"),
         Index(
+            "uq_tasks_schedule_id_scheduled_for",
+            "schedule_id",
+            "scheduled_for",
+            unique=True,
+            postgresql_where=text("schedule_id IS NOT NULL"),
+        ),
+        Index(
             "uq_tasks_user_id_idempotency_key",
             "user_id",
             "idempotency_key",
@@ -65,5 +72,9 @@ class Task(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     event_seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("scheduled_jobs.id", ondelete="SET NULL")
+    )
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

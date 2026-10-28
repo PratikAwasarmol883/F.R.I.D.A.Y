@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEST_DB = "friday_test"
 TABLES = (
     "users, devices, conversations, messages, usage_records, audit_events, tasks, task_events,"
-    " reports, research_sources"
+    " reports, research_sources, memories, scheduled_jobs"
 )
 T = TypeVar("T")
 
@@ -112,6 +112,16 @@ def alice(session_factory: SessionFactory) -> Seeded:
 @pytest.fixture
 def bob(session_factory: SessionFactory) -> Seeded:
     return make_user(session_factory, "bob")
+
+
+@pytest.fixture
+def alice_mem(session_factory: SessionFactory) -> Seeded:
+    return make_user(session_factory, "alice", ["tool:remember"])
+
+
+@pytest.fixture
+def alice_mem_search(session_factory: SessionFactory) -> Seeded:
+    return make_user(session_factory, "alice", ["tool:remember", "tool:web_search"])
 
 
 @pytest.fixture

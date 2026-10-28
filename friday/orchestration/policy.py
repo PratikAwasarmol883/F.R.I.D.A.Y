@@ -11,6 +11,8 @@ from friday.domain.enums import RiskClass
 from friday.orchestration.tool_contracts import Tool
 from friday.orchestration.tool_registry import ToolRegistry
 
+_NEEDS_APPROVAL = frozenset({RiskClass.CONSEQUENTIAL, RiskClass.DESTRUCTIVE})
+
 
 class DenyReason(StrEnum):
     UNKNOWN_TOOL = "unknown_tool"
@@ -60,8 +62,8 @@ def _statically_permitted(tool: Tool[Any, Any], ctx: PolicyContext) -> DenyReaso
         return DenyReason.TOOL_DISABLED
     if contract.required_scope not in ctx.device_scopes:
         return DenyReason.MISSING_SCOPE
-    if contract.risk_class != RiskClass.READ_ONLY or contract.requires_approval:
-        return DenyReason.APPROVAL_REQUIRED  # no approval flow exists yet, so fail closed
+    if contract.requires_approval or contract.risk_class in _NEEDS_APPROVAL:
+        return DenyReason.APPROVAL_REQUIRED  # consequential work waits for the approval flow
     return None
 
 

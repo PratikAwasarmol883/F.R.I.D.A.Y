@@ -10,6 +10,8 @@ from friday.domain.exceptions import (
     DomainError,
     ForbiddenError,
     IdempotencyConflictError,
+    MemoryLimitError,
+    MemoryRejectedError,
     NoSpeechError,
     NotAuthenticatedError,
     NotFoundError,
@@ -17,6 +19,7 @@ from friday.domain.exceptions import (
     ProviderError,
     ProviderTimeoutError,
     ProviderUnavailableError,
+    ScheduleLimitError,
     TaskLimitError,
     TaskNotCancellableError,
     UnsupportedMediaError,
@@ -33,6 +36,8 @@ _DOMAIN_ERRORS: list[tuple[type[DomainError], int, str, str]] = [
     (UnsupportedMediaError, 415, "UNSUPPORTED_MEDIA_TYPE", "That audio format is not supported."),
     (NoSpeechError, 422, "NO_SPEECH_DETECTED", "No speech was detected in the recording."),
     (VoiceLimitError, 429, "VOICE_LIMIT", "The daily voice request limit has been reached."),
+    (MemoryLimitError, 429, "MEMORY_LIMIT", "You have reached the memory limit."),
+    (ScheduleLimitError, 429, "SCHEDULE_LIMIT", "You have reached the schedule limit."),
     (TaskLimitError, 429, "TASK_LIMIT", "Too many active tasks; wait for one to finish."),
     (
         IdempotencyConflictError,
@@ -53,6 +58,16 @@ _DOMAIN_ERRORS: list[tuple[type[DomainError], int, str, str]] = [
 
 
 async def _domain_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, MemoryRejectedError):  # tell the caller why, without echoing the text
+        return JSONResponse(
+            status_code=422,
+            content=error_body(
+                "MEMORY_REJECTED",
+                "That note cannot be saved.",
+                request_id_var.get(),
+                [{"field": "value", "type": exc.reason}],
+            ),
+        )
     for error_type, status, code, message in _DOMAIN_ERRORS:
         if isinstance(exc, error_type):
             headers = {"WWW-Authenticate": "Bearer"} if status == 401 else None

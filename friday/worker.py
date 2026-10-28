@@ -10,6 +10,7 @@ from friday.persistence.database import get_engine, get_sessionmaker
 from friday.workers.handlers.assistant_ask import AssistantAskHandler
 from friday.workers.handlers.registry import HandlerRegistry
 from friday.workers.handlers.research import ResearchHandler
+from friday.workers.scheduler import Scheduler
 from friday.workers.worker import Worker
 
 logger = get_logger(__name__)
@@ -35,7 +36,9 @@ def build_worker() -> Worker:
             fetcher_factory=get_fetcher,
         )
     )
-    return Worker(session_factory, settings, handlers)
+    return Worker(
+        session_factory, settings, handlers, scheduler=Scheduler(session_factory, settings)
+    )
 
 
 async def amain() -> None:

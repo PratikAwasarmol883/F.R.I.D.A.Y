@@ -13,16 +13,20 @@ from friday.core.logging_config import get_logger
 from friday.domain.enums import AuditOutcome, MessageRole
 from friday.domain.exceptions import BudgetExceededError, NotFoundError, ProviderError
 from friday.orchestration.executor import ToolLoop, ToolUse
+from friday.orchestration.memory import format_memory_block, select_relevant
 from friday.orchestration.policy import PolicyContext, advertised_tools
 from friday.orchestration.tool_contracts import Source
 from friday.orchestration.tool_registry import ToolRegistry
 from friday.persistence.models import Conversation
 from friday.persistence.repositories.audit import AuditRepository
 from friday.persistence.repositories.conversations import ConversationRepository
+from friday.persistence.repositories.memories import MemoryRepository
 from friday.persistence.repositories.tool_executions import ToolExecutionRepository
 from friday.persistence.repositories.usage import UsageRepository
 from friday.services.auth_service import CurrentUser
+from friday.services.memory_service import MemoryService
 from friday.services.tool_recording import DbExecutionRecorder
+from friday.tools.remember import RememberTool
 
 logger = get_logger(__name__)
 
@@ -106,7 +110,9 @@ class AssistantService:
         try:
             baseline = await self._tokens_used_today(user)
             self._check_budget(baseline, 0)
-            ctx = await self._policy_context(user)
+            registry = self._registry_for(user, conversation_id)
+            ctx = await self._policy_context(user, registry)
+            memory_block = await self._memory_block(user, message, history)
             await self._session.commit()  # no DB transaction is held across LLM or tool calls
             usage_ids: list[uuid.UUID] = []
 
@@ -127,16 +133,17 @@ class AssistantService:
 
             loop = ToolLoop(
                 self._llm,
-                self._registry,
+                registry,
                 DbExecutionRecorder(
                     self._session, user, conversation_id, hooks.task_id if hooks else None
                 ),
                 system_prompt=(
                     SYSTEM_PROMPT_WITH_TOOLS
-                    if advertised_tools(self._registry, ctx)
+                    if advertised_tools(registry, ctx)
                     else SYSTEM_PROMPT_NO_TOOLS
                 )
-                + (VOICE_SUFFIX if style == "voice" else ""),
+                + (VOICE_SUFFIX if style == "voice" else "")
+                + ("\n\n" + memory_block if memory_block else ""),
                 max_output_tokens=self._settings.llm_max_output_tokens,
                 llm_timeout_seconds=self._settings.llm_timeout_seconds,
                 deadline_seconds=self._settings.ask_deadline_seconds,
@@ -223,8 +230,39 @@ class AssistantService:
         if used_before + spent_this_ask >= self._settings.daily_token_budget:
             raise BudgetExceededError
 
-    async def _policy_context(self, user: CurrentUser) -> PolicyContext:
-        tools = self._registry.all()
+    def _registry_for(self, user: CurrentUser, conversation_id: uuid.UUID | None) -> ToolRegistry:
+        """The shared tools plus a `remember` tool bound to this user (suggestions only)."""
+        if not self._settings.memory_enabled:
+            return self._registry
+        registry = ToolRegistry()
+        for tool in self._registry.all():
+            registry.register(tool)
+
+        async def suggest(kind: str, value: str) -> None:
+            await MemoryService(self._session, self._settings).propose(
+                user, kind, value, conversation_id
+            )
+
+        registry.register(RememberTool(suggest))
+        return registry
+
+    async def _memory_block(
+        self, user: CurrentUser, message: str, history: list[LLMMessage]
+    ) -> str:
+        if not (self._settings.memory_enabled and self._settings.memory_in_prompt):
+            return ""
+        notes = await MemoryRepository(self._session).approved_notes(user.user_id)
+        recent = " ".join(m.content for m in history[-4:] if isinstance(m, ChatMessage))
+        chosen = select_relevant(
+            notes,
+            f"{message} {recent}",
+            max_notes=self._settings.memory_prompt_max_notes,
+            max_chars=self._settings.memory_prompt_max_chars,
+        )
+        return format_memory_block(chosen)
+
+    async def _policy_context(self, user: CurrentUser, registry: ToolRegistry) -> PolicyContext:
+        tools = registry.all()
         counts = (
             await self._tool_executions.counts_since(user.user_id, _start_of_day()) if tools else {}
         )

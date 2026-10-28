@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 
+from friday.domain.enums import RiskClass
 from friday.orchestration.policy import (
     Allow,
     Deny,
@@ -10,6 +11,7 @@ from friday.orchestration.policy import (
     advertised_tools,
     evaluate,
 )
+from friday.orchestration.tool_contracts import ToolRegistrationError
 from friday.orchestration.tool_registry import ToolRegistry
 
 from .tool_fixtures import EchoTool, danger_tool
@@ -124,3 +126,52 @@ def test_only_permitted_read_only_tools_are_advertised(registry: ToolRegistry) -
     assert [t.contract.name for t in advertised_tools(registry, _ctx())] == ["echo"]
     assert advertised_tools(registry, _ctx(device_scopes=frozenset())) == []
     assert advertised_tools(registry, _ctx(enabled_tools=frozenset())) == []
+
+
+def test_reversible_writes_are_allowed_only_when_scoped_and_not_marked_for_approval() -> None:
+    from friday.domain.enums import RiskClass
+
+    registry = ToolRegistry()
+    registry.register(
+        EchoTool(
+            name="note_taker",
+            required_scope="tool:note_taker",
+            risk_class=RiskClass.REVERSIBLE_WRITE,
+        )
+    )
+    registry.register(
+        EchoTool(
+            name="gated_writer",
+            required_scope="tool:gated_writer",
+            risk_class=RiskClass.REVERSIBLE_WRITE,
+            requires_approval=True,
+        )
+    )
+    registry.register(danger_tool())
+    names = frozenset({"note_taker", "gated_writer", "send_email"})
+    ctx = _ctx(
+        enabled_tools=names,
+        available_tools=names,
+        device_scopes=frozenset({"tool:note_taker", "tool:gated_writer", "tool:send_email"}),
+    )
+    assert isinstance(evaluate(registry, "note_taker", {"text": "x"}, ctx), Allow)
+    gated = evaluate(registry, "gated_writer", {"text": "x"}, ctx)
+    assert _reason(gated) is DenyReason.APPROVAL_REQUIRED
+    consequential = evaluate(registry, "send_email", {"text": "x"}, ctx)
+    assert _reason(consequential) is DenyReason.APPROVAL_REQUIRED
+    assert [t.contract.name for t in advertised_tools(registry, ctx)] == ["note_taker"]
+    unscoped = _ctx(
+        enabled_tools=frozenset({"note_taker"}),
+        available_tools=frozenset({"note_taker"}),
+        device_scopes=frozenset(),
+    )
+    assert (
+        _reason(evaluate(registry, "note_taker", {"text": "x"}, unscoped))
+        is DenyReason.MISSING_SCOPE
+    )
+
+
+@pytest.mark.parametrize("risk", [RiskClass.CONSEQUENTIAL, RiskClass.DESTRUCTIVE])
+def test_registration_refuses_risky_tools_that_skip_the_approval_flag(risk: RiskClass) -> None:
+    with pytest.raises(ToolRegistrationError, match="must require approval"):
+        ToolRegistry().register(danger_tool("sloppy", risk_class=risk, requires_approval=False))

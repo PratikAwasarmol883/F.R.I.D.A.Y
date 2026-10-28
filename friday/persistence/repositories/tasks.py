@@ -11,7 +11,7 @@ import random
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select, text, update
@@ -131,6 +131,48 @@ class TaskRepository:
         existing = await self.find_by_idempotency_key(user_id, idempotency_key)
         assert existing is not None
         return existing, False
+
+    async def create_scheduled(
+        self,
+        *,
+        user_id: uuid.UUID,
+        device_id: uuid.UUID | None,
+        task_type: str,
+        task_input: dict[str, Any],
+        fingerprint: str,
+        max_attempts: int,
+        max_runtime_seconds: int,
+        schedule_id: uuid.UUID,
+        scheduled_for: datetime,
+    ) -> Task | None:
+        """One task per (schedule, occurrence); None means another dispatcher already made it."""
+        stmt = (
+            pg_insert(Task)
+            .values(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                device_id=device_id,
+                type=task_type,
+                status=TaskStatus.QUEUED.value,
+                input=task_input,
+                request_fingerprint=fingerprint,
+                max_attempts=max_attempts,
+                max_runtime_seconds=max_runtime_seconds,
+                schedule_id=schedule_id,
+                scheduled_for=scheduled_for,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[Task.schedule_id, Task.scheduled_for],
+                index_where=Task.schedule_id.is_not(None),
+            )
+            .returning(Task)
+        )
+        created = await self._session.scalar(stmt)
+        if created is not None:
+            await self.add_event(
+                created.id, TaskEventType.CREATED, {"type": task_type, "scheduled": True}
+            )
+        return created
 
     async def get(self, task_id: uuid.UUID) -> Task | None:
         return await self._session.scalar(

@@ -116,3 +116,18 @@ pytest
 ```
 
 The compose credentials are local-development defaults only; override via environment for anything else.
+
+### Memory and schedules (Milestone 6)
+
+**Memory** (`/api/v1/memory`): short notes (preference, fact, project, note) that personalize answers.
+You create notes directly; the assistant's `remember` tool (device scope `tool:remember`) can only
+*propose* notes, which stay `pending` and are never used until you `POST /memory/{id}/approve`.
+Notes can be listed, edited, exported (`GET /memory/export`) and deleted (a real delete). Credentials and,
+for assistant proposals, links are rejected. Set `MEMORY_IN_PROMPT=false` to stop notes reaching the model.
+
+**Schedules** (`/api/v1/schedules`): daily or weekly runs at `HH:MM` in an IANA time zone, for
+`assistant.ask` or `research.run` tasks. The worker creates one ordinary durable task per occurrence
+(exactly once, even with several workers). Occurrences missed by more than `SCHEDULE_GRACE_SECONDS` are
+skipped and audited, never backfilled. A nonexistent local time (spring-forward) runs shifted forward;
+an ambiguous one (fall-back) runs once. Schedules stop when the creating device is revoked.
+`GET /schedules/{id}/runs` lists recent runs.

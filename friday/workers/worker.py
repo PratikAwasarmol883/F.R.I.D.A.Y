@@ -16,6 +16,7 @@ from friday.persistence.models import Task
 from friday.persistence.repositories.tasks import Reaped, TaskRepository
 from friday.workers.handlers.registry import HandlerRegistry
 from friday.workers.runner import TaskRun
+from friday.workers.scheduler import Scheduler
 
 logger = get_logger(__name__)
 
@@ -37,7 +38,9 @@ class Worker:
         *,
         worker_id: str | None = None,
         rng: random.Random | None = None,
+        scheduler: Scheduler | None = None,
     ) -> None:
+        self._scheduler = scheduler
         self.worker_id = worker_id or new_worker_id()
         self._session_factory = session_factory
         self._settings = settings
@@ -111,6 +114,21 @@ class Worker:
             logger.warning("task.reaped", extra={"task_id": item.task_id, "outcome": item.outcome})
         return reaped
 
+    async def dispatch_schedules(self) -> int:
+        """Create tasks for due schedules (safe to run from every worker)."""
+        if self._scheduler is None:
+            return 0
+        summary = await self._scheduler.dispatch_due()
+        if summary.dispatched or summary.missed or summary.disabled or summary.skipped:
+            logger.info(
+                "schedules.dispatched",
+                extra={
+                    "outcome": f"ran={summary.dispatched} missed={summary.missed} "
+                    f"skipped={summary.skipped} disabled={summary.disabled}"
+                },
+            )
+        return summary.dispatched
+
     async def purge(self) -> int:
         async with self._session_factory() as session:
             removed = await TaskRepository(session).purge_terminal_older_than(
@@ -145,6 +163,7 @@ class Worker:
                 if started >= next_purge:
                     await self.purge()
                     next_purge = started + PURGE_INTERVAL_SECONDS
+                await self.dispatch_schedules()
                 await self.tick()
             except Exception:
                 logger.exception("Worker loop error; continuing")

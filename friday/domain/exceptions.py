@@ -68,3 +68,19 @@ class NoSpeechError(DomainError):
 
 class VoiceLimitError(DomainError):
     """The user's daily voice request limit is used up."""
+
+
+class MemoryRejectedError(DomainError):
+    """A memory note was refused: empty, too long, credentials, or a disallowed link."""
+
+    def __init__(self, reason: str = "rejected") -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class MemoryLimitError(DomainError):
+    """The user has reached a memory cap."""
+
+
+class ScheduleLimitError(DomainError):
+    """The user already has the maximum number of schedules."""
