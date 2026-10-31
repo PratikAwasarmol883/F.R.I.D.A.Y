@@ -37,7 +37,15 @@ class Deny:
     detail: str | None = None
 
 
-Decision = Allow | Deny
+@dataclass(frozen=True)
+class Propose:
+    """A valid, permitted call that may only run after the user approves this exact action."""
+
+    tool: Tool[Any, Any]
+    arguments: BaseModel
+
+
+Decision = Allow | Propose | Deny
 
 
 @dataclass
@@ -49,11 +57,16 @@ class PolicyContext:
     daily_counts: dict[str, int] = field(default_factory=dict)
     calls_per_tool: dict[str, int] = field(default_factory=dict)
     total_calls: int = 0
+    can_propose: bool = False  # only callers that can store a proposal turn gated tools into one
 
     def record_call(self, tool_name: str) -> None:
         self.total_calls += 1
         self.calls_per_tool[tool_name] = self.calls_per_tool.get(tool_name, 0) + 1
         self.daily_counts[tool_name] = self.daily_counts.get(tool_name, 0) + 1
+
+
+def _needs_approval(tool: Tool[Any, Any]) -> bool:
+    return tool.contract.requires_approval or tool.contract.risk_class in _NEEDS_APPROVAL
 
 
 def _statically_permitted(tool: Tool[Any, Any], ctx: PolicyContext) -> DenyReason | None:
@@ -62,8 +75,8 @@ def _statically_permitted(tool: Tool[Any, Any], ctx: PolicyContext) -> DenyReaso
         return DenyReason.TOOL_DISABLED
     if contract.required_scope not in ctx.device_scopes:
         return DenyReason.MISSING_SCOPE
-    if contract.requires_approval or contract.risk_class in _NEEDS_APPROVAL:
-        return DenyReason.APPROVAL_REQUIRED  # consequential work waits for the approval flow
+    if _needs_approval(tool) and not ctx.can_propose:
+        return DenyReason.APPROVAL_REQUIRED  # nobody here can store a proposal: fail closed
     return None
 
 
@@ -102,4 +115,6 @@ def evaluate(
         and ctx.daily_counts.get(contract.name, 0) >= contract.daily_limit
     ):
         return Deny(DenyReason.DAILY_LIMIT)
+    if _needs_approval(tool):
+        return Propose(tool, validated)
     return Allow(tool, validated)

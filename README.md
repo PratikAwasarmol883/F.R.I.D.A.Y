@@ -131,3 +131,19 @@ for assistant proposals, links are rejected. Set `MEMORY_IN_PROMPT=false` to sto
 skipped and audited, never backfilled. A nonexistent local time (spring-forward) runs shifted forward;
 an ambiguous one (fall-back) runs once. Schedules stop when the creating device is revoked.
 `GET /schedules/{id}/runs` lists recent runs.
+
+### Approvals and the notification integration (Milestone 7)
+
+Consequential actions are never run by the assistant. When the model wants to, it can only *propose* the
+exact action; the proposal appears in `GET /api/v1/approvals` with a plain-language summary, the exact
+arguments, and a hash. Nothing happens until a device with the `approvals:decide` scope calls
+`POST /api/v1/approvals/{id}/decision` with `{"decision": "approve", "arguments_hash": "<hash you saw>"}`.
+Proposals expire after an hour, run at most once, and are re-checked at the moment of use (integration
+still connected, tool still enabled, requesting device still active).
+
+The one integration is **push notifications** through an ntfy-compatible server (`NOTIFY_BASE_URL`,
+default `https://ntfy.sh`). A device with `integrations:manage` connects it with
+`POST /api/v1/integrations/ntfy/connect {"topic": "..."}`; the topic is encrypted at rest with
+`INTEGRATION_KEY` (a Fernet key, see `.env.example`) and removed when you `DELETE /api/v1/integrations/ntfy`,
+which also rejects any pending proposals. Give a device `tool:send_notification` to let the assistant
+propose notifications. Treat the topic like a password: anyone who knows it can read your notifications.

@@ -6,6 +6,7 @@ from typing import Any
 from friday.adapters.fetch.safe_fetcher import SafeFetcher
 from friday.adapters.llm import LLMProvider, LLMResult
 from friday.adapters.llm.anthropic_provider import build_anthropic_provider
+from friday.adapters.notify.ntfy import NtfyNotifier
 from friday.adapters.search.base import SearchProvider
 from friday.adapters.search.tavily import TavilySearchProvider
 from friday.adapters.speech.base import SynthesizedAudio, Transcript
@@ -108,3 +109,13 @@ def get_speech(settings: Settings) -> OpenAICompatibleSpeech:
         settings.tts_model,
         settings.tts_voice,
     )
+
+
+@lru_cache
+def _ntfy(base_url: str) -> NtfyNotifier:
+    return NtfyNotifier(base_url)
+
+
+def get_notifier_for(settings: Settings) -> NtfyNotifier:
+    """One shared HTTP client per configured notification host."""
+    return _ntfy(settings.notify_base_url)

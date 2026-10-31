@@ -6,10 +6,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from friday.core.errors import error_body
 from friday.core.request_context import request_id_var
 from friday.domain.exceptions import (
+    ApprovalChangedError,
+    ApprovalExpiredError,
+    ApprovalLimitError,
+    ApprovalNotPendingError,
     BudgetExceededError,
     DomainError,
     ForbiddenError,
     IdempotencyConflictError,
+    IntegrationUnavailableError,
     MemoryLimitError,
     MemoryRejectedError,
     NoSpeechError,
@@ -38,6 +43,26 @@ _DOMAIN_ERRORS: list[tuple[type[DomainError], int, str, str]] = [
     (VoiceLimitError, 429, "VOICE_LIMIT", "The daily voice request limit has been reached."),
     (MemoryLimitError, 429, "MEMORY_LIMIT", "You have reached the memory limit."),
     (ScheduleLimitError, 429, "SCHEDULE_LIMIT", "You have reached the schedule limit."),
+    (
+        ApprovalLimitError,
+        429,
+        "APPROVAL_LIMIT",
+        "Too many approvals are waiting; decide some first.",
+    ),
+    (
+        ApprovalChangedError,
+        409,
+        "APPROVAL_CHANGED",
+        "The action no longer matches what you reviewed.",
+    ),
+    (ApprovalNotPendingError, 409, "APPROVAL_NOT_PENDING", "This approval was already decided."),
+    (ApprovalExpiredError, 410, "APPROVAL_EXPIRED", "This approval has expired."),
+    (
+        IntegrationUnavailableError,
+        503,
+        "INTEGRATION_UNAVAILABLE",
+        "Integrations are not configured on this server.",
+    ),
     (TaskLimitError, 429, "TASK_LIMIT", "Too many active tasks; wait for one to finish."),
     (
         IdempotencyConflictError,

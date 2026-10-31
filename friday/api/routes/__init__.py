@@ -1,9 +1,11 @@
 from fastapi import APIRouter
 
 from friday.api.routes import (
+    approvals,
     assistant,
     conversations,
     health,
+    integrations,
     memory,
     reports,
     research,
@@ -22,3 +24,5 @@ api_router.include_router(reports.router)
 api_router.include_router(voice.router)
 api_router.include_router(memory.router)
 api_router.include_router(schedules.router)
+api_router.include_router(approvals.router)
+api_router.include_router(integrations.router)

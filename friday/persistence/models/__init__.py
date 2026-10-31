@@ -1,6 +1,8 @@
+from friday.persistence.models.approval import Approval
 from friday.persistence.models.audit import AuditEvent
 from friday.persistence.models.conversation import Conversation, Message
 from friday.persistence.models.device import Device
+from friday.persistence.models.integration import IntegrationConnection
 from friday.persistence.models.memory import Memory
 from friday.persistence.models.report import Report, ResearchSource
 from friday.persistence.models.schedule import ScheduledJob
@@ -11,9 +13,11 @@ from friday.persistence.models.usage import UsageRecord
 from friday.persistence.models.user import User
 
 __all__ = [
+    "Approval",
     "AuditEvent",
     "Conversation",
     "Device",
+    "IntegrationConnection",
     "Memory",
     "Message",
     "Report",

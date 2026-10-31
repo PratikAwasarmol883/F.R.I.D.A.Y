@@ -294,3 +294,36 @@ class ScheduleRunOut(BaseModel):
     finished_at: datetime | None
     error_code: str | None
     result: dict[str, Any] | None
+
+
+APPROVAL_STATUSES = Literal["pending", "executing", "executed", "failed", "rejected", "expired"]
+
+
+class ApprovalOut(BaseModel):
+    id: uuid.UUID
+    tool: str
+    summary: str
+    arguments: dict[str, Any]
+    arguments_hash: str
+    status: str
+    created_at: datetime
+    expires_at: datetime
+    decided_at: datetime | None
+    finished_at: datetime | None
+    error_code: str | None
+
+
+class ApprovalDecision(StrictModel):
+    decision: Literal["approve", "reject"]
+    arguments_hash: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+
+class NtfyConnect(StrictModel):
+    topic: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{8,64}$")]
+
+
+class IntegrationOut(BaseModel):
+    provider: str
+    status: str
+    created_at: datetime
+    revoked_at: datetime | None

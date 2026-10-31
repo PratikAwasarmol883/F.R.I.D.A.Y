@@ -84,3 +84,23 @@ class MemoryLimitError(DomainError):
 
 class ScheduleLimitError(DomainError):
     """The user already has the maximum number of schedules."""
+
+
+class ApprovalLimitError(DomainError):
+    """The user already has the maximum number of pending approvals."""
+
+
+class ApprovalChangedError(DomainError):
+    """The decision named a different action than the one stored."""
+
+
+class ApprovalNotPendingError(DomainError):
+    """The approval was already decided, executed, or rejected."""
+
+
+class ApprovalExpiredError(DomainError):
+    """The approval passed its expiry before a decision."""
+
+
+class IntegrationUnavailableError(DomainError):
+    """Integrations are not configured on this server."""

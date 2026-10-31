@@ -6,13 +6,14 @@ import os
 import random
 import socket
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from friday.core.config import Settings
 from friday.core.logging_config import get_logger
 from friday.persistence.models import Task
+from friday.persistence.repositories.approvals import ApprovalRepository
 from friday.persistence.repositories.tasks import Reaped, TaskRepository
 from friday.workers.handlers.registry import HandlerRegistry
 from friday.workers.runner import TaskRun
@@ -133,6 +134,9 @@ class Worker:
         async with self._session_factory() as session:
             removed = await TaskRepository(session).purge_terminal_older_than(
                 self._settings.task_retention_days
+            )
+            removed += await ApprovalRepository(session).purge_decided(
+                datetime.now(UTC) - timedelta(days=self._settings.approval_retention_days)
             )
             await session.commit()
         if removed:

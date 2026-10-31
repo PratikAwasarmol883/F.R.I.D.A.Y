@@ -15,8 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from friday.adapters.llm.fake import FakeLLMProvider
+from friday.adapters.notify.fake import FakeNotifier
 from friday.adapters.speech.fake import FakeSpeech
-from friday.api.dependencies import get_llm_provider, get_speech_provider, get_tool_registry
+from friday.api.dependencies import (
+    get_llm_provider,
+    get_notifier,
+    get_speech_provider,
+    get_tool_registry,
+)
 from friday.app import create_app
 from friday.core.config import Settings, get_settings, settings
 from friday.core.logging_config import JSONFormatter
@@ -29,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEST_DB = "friday_test"
 TABLES = (
     "users, devices, conversations, messages, usage_records, audit_events, tasks, task_events,"
-    " reports, research_sources, memories, scheduled_jobs"
+    " reports, research_sources, memories, scheduled_jobs, approvals, integration_connections"
 )
 T = TypeVar("T")
 
@@ -148,6 +154,8 @@ def build_app(session_factory: SessionFactory) -> BuildApp:
         llm: FakeLLMProvider | None = None,
         registry: ToolRegistry | None = None,
         speech: FakeSpeech | None = None,
+        *,
+        notifier: FakeNotifier | None = None,
         **overrides: Any,
     ) -> Any:
         test_settings = Settings(_env_file=None).model_copy(update=overrides)
@@ -165,6 +173,8 @@ def build_app(session_factory: SessionFactory) -> BuildApp:
             app.dependency_overrides[get_tool_registry] = lambda: registry
         if speech is not None:
             app.dependency_overrides[get_speech_provider] = lambda: speech
+        if notifier is not None:
+            app.dependency_overrides[get_notifier] = lambda: notifier
         return app
 
     return build
@@ -184,10 +194,13 @@ def make_client(build_app: BuildApp) -> Iterator[Callable[..., TestClient]]:
         llm: FakeLLMProvider | None = None,
         registry: ToolRegistry | None = None,
         speech: FakeSpeech | None = None,
+        *,
+        notifier: FakeNotifier | None = None,
         **overrides: Any,
     ) -> TestClient:
         test_client = TestClient(
-            build_app(llm, registry, speech, **overrides), raise_server_exceptions=False
+            build_app(llm, registry, speech, notifier=notifier, **overrides),
+            raise_server_exceptions=False,
         )
         clients.append(test_client)
         return test_client

@@ -101,6 +101,10 @@ class Tool(ABC, Generic[InputT, OutputT]):
         """Tool-specific masking applied before arguments are stored (e.g. URL query strings)."""
         return arguments
 
+    def describe_action(self, arguments: InputT) -> str:
+        """Plain-language preview of exactly what approving this call would do."""
+        return f"Run {self.contract.name}"
+
     def summarize(self, output: OutputT) -> ToolSummary:
         """Metadata for audit rows and client-visible sources; default exposes nothing."""
         return ToolSummary()

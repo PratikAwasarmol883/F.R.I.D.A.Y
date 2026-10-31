@@ -13,6 +13,7 @@ _OUTCOME = {
     ToolStatus.DENIED: AuditOutcome.DENIED,
     ToolStatus.FAILED: AuditOutcome.FAILURE,
     ToolStatus.TIMED_OUT: AuditOutcome.FAILURE,
+    ToolStatus.PENDING_APPROVAL: AuditOutcome.SUCCESS,
 }
 
 

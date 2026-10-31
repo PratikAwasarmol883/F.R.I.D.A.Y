@@ -9,6 +9,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from pydantic import BaseModel
+
 from friday.adapters.llm import (
     AssistantToolTurn,
     ChatMessage,
@@ -29,6 +31,7 @@ from friday.orchestration.policy import (
     Deny,
     DenyReason,
     PolicyContext,
+    Propose,
     advertised_tools,
     evaluate,
 )
@@ -44,6 +47,10 @@ MAX_SOURCES = 10
 
 _DENIED_MESSAGE = "Tool call not permitted."
 _INVALID_MESSAGE = "Tool call rejected: the arguments did not match the tool's schema."
+_PENDING_MESSAGE = (
+    "This action has NOT been done. It was sent to the user's approval center and runs only if "
+    "they approve it. Tell the user it is waiting for their approval; never say it was done."
+)
 _FAILED_MESSAGE = (
     "The tool could not complete this request. Continue without it, and tell the user "
     "you were unable to use it."
@@ -61,6 +68,12 @@ class ExecutionEntry:
     result_meta: dict[str, Any] | None
     error_code: str | None
     duration_ms: int
+
+
+class ProposalSink(Protocol):
+    """Stores a proposed action for the user to decide on; raises ToolError when refused."""
+
+    async def propose(self, tool: Tool[Any, Any], arguments: BaseModel) -> uuid.UUID: ...
 
 
 class ExecutionRecorder(Protocol):
@@ -127,7 +140,9 @@ class ToolLoop:
         on_event: EventCallback | None = None,
         check_cancelled: CancelCheck | None = None,
         on_usage: UsageCallback | None = None,
+        proposals: ProposalSink | None = None,
     ) -> None:
+        self._proposals = proposals
         self._llm = llm
         self._registry = registry
         self._recorder = recorder
@@ -229,8 +244,12 @@ class ToolLoop:
         await self._checkpoint()  # never start a tool call after cancellation
         name = safe_tool_name(call.name)
         decision = evaluate(self._registry, call.name, call.arguments, ctx)
+        if isinstance(decision, Propose) and self._proposals is None:
+            decision = Deny(DenyReason.APPROVAL_REQUIRED)  # no way to store it: never run it
         if isinstance(decision, Deny):
             return await self._denied(call, name, decision)
+        if isinstance(decision, Propose):
+            return await self._propose(call, name, decision, ctx)
         return await self._execute_allowed(call, name, decision, ctx)
 
     async def _denied(
@@ -260,6 +279,39 @@ class ToolLoop:
             (),
             execution_id,
         )
+
+    async def _propose(
+        self, call: ToolCall, name: str, decision: Propose, ctx: PolicyContext
+    ) -> tuple[ToolResult, ToolUse, tuple[Source, ...], uuid.UUID]:
+        """Store the call for approval. Nothing is executed here, whatever the model says next."""
+        assert self._proposals is not None
+        tool, contract = decision.tool, decision.tool.contract
+        ctx.record_call(contract.name)
+        status, error_code, meta = ToolStatus.PENDING_APPROVAL, None, None
+        content, is_error = _PENDING_MESSAGE, False
+        try:
+            approval_id = await self._proposals.propose(tool, decision.arguments)
+            meta = {"approval_id": str(approval_id)}
+        except ToolError as exc:
+            status, error_code, content, is_error = (
+                ToolStatus.FAILED,
+                exc.code,
+                _FAILED_MESSAGE,
+                True,
+            )
+        entry = ExecutionEntry(
+            tool_name=contract.name,
+            tool_version=contract.version,
+            risk_class=str(contract.risk_class),
+            status=status,
+            arguments_redacted=_stored_arguments(call.arguments, contract.redacted_fields, tool),
+            arguments_hash=_hash(call.arguments),
+            result_meta=meta,
+            error_code=error_code,
+            duration_ms=0,
+        )
+        execution_id = await self._recorder.record(entry)
+        return ToolResult(call.id, content, is_error), ToolUse(name, status), (), execution_id
 
     async def _execute_allowed(
         self, call: ToolCall, name: str, decision: Allow, ctx: PolicyContext

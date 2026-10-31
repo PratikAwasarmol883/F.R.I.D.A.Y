@@ -31,3 +31,4 @@ class ToolStatus(StrEnum):
     FAILED = "failed"
     DENIED = "denied"
     TIMED_OUT = "timed_out"
+    PENDING_APPROVAL = "pending_approval"

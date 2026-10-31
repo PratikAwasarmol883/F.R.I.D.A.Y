@@ -6,6 +6,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from friday.core.credentials import is_valid_key
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
@@ -25,7 +27,9 @@ class Settings(BaseSettings):
     max_history_messages: int = Field(default=20, ge=0, le=100)
     daily_token_budget: int = Field(default=200_000, ge=1)
 
-    enabled_tools: str = "web_search,web_fetch,remember"  # comma-separated kill switch
+    enabled_tools: str = (
+        "web_search,web_fetch,remember,send_notification"  # comma-separated kill switch
+    )
     search_provider: Literal["tavily"] = "tavily"
     search_api_key: SecretStr | None = None
     tool_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
@@ -54,6 +58,15 @@ class Settings(BaseSettings):
     max_schedules_per_user: int = Field(default=10, ge=1, le=1_000)
     schedule_grace_seconds: float = Field(default=3600.0, ge=0, le=86_400)
     scheduler_batch: int = Field(default=20, ge=1, le=500)
+
+    integration_key: SecretStr | None = None  # Fernet key; integrations are refused without it
+    notify_base_url: str = "https://ntfy.sh"
+    notify_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    approval_ttl_seconds: int = Field(default=3600, ge=60, le=86_400)
+    max_pending_approvals: int = Field(default=10, ge=1, le=1_000)
+    approval_retention_days: int = Field(default=30, ge=1, le=3650)
+    approval_exec_stale_seconds: int = Field(default=300, ge=30, le=3600)
+    notification_daily_limit: int = Field(default=20, ge=1)
 
     fetch_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     fetch_daily_limit: int = Field(default=100, ge=1)
@@ -85,6 +98,28 @@ class Settings(BaseSettings):
             raise ValueError("SPEECH_BASE_URL must be a plain URL without credentials or query")
         return value.rstrip("/")
 
+    @field_validator("notify_base_url")
+    @classmethod
+    def _safe_notify_base_url(cls, value: str) -> str:
+        parts = urlsplit(value)
+        local = parts.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parts.scheme != "https" and not (parts.scheme == "http" and local):
+            raise ValueError("NOTIFY_BASE_URL must be https (http only for localhost)")
+        if not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+            raise ValueError("NOTIFY_BASE_URL must be a plain URL without credentials or query")
+        return value.rstrip("/")
+
+    @field_validator("integration_key")
+    @classmethod
+    def _valid_integration_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if (
+            value is not None
+            and value.get_secret_value()
+            and not is_valid_key(value.get_secret_value())
+        ):
+            raise ValueError("INTEGRATION_KEY must be a Fernet key (urlsafe base64, 32 bytes)")
+        return value
+
     @model_validator(mode="after")
     def _lease_outlives_heartbeat(self) -> "Settings":
         if self.task_lease_seconds <= 2 * self.task_heartbeat_seconds:
@@ -100,6 +135,10 @@ class Settings(BaseSettings):
     @property
     def enabled_tool_names(self) -> frozenset[str]:
         return frozenset(name.strip() for name in self.enabled_tools.split(",") if name.strip())
+
+    @property
+    def integrations_configured(self) -> bool:
+        return bool(self.integration_key and self.integration_key.get_secret_value())
 
     @property
     def speech_configured(self) -> bool:

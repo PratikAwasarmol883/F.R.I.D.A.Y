@@ -339,3 +339,32 @@ def test_allowed_calls_store_arguments_with_the_contracts_redacted_fields_masked
     assert entry.status is ToolStatus.SUCCEEDED
     assert entry.arguments_redacted == {"text": "[REDACTED]", "times": 2}
     assert "private note" not in json.dumps(entry.arguments_redacted)
+
+
+def test_a_proposal_is_never_executed_when_no_sink_exists() -> None:
+    """Fail closed: `can_propose` without a way to store the proposal is just a denial."""
+    import asyncio
+
+    from friday.adapters.llm.fake import FakeLLMProvider
+    from friday.domain.enums import ToolStatus
+    from friday.orchestration.tool_registry import ToolRegistry
+
+    from .tool_fixtures import danger_tool
+    from .tool_helpers import MemoryRecorder, final, make_loop, policy_ctx, tool_turn
+
+    tool = danger_tool()
+    registry = ToolRegistry()
+    registry.register(tool)
+    recorder = MemoryRecorder()
+    llm = FakeLLMProvider(script=[tool_turn(("send_email", {"text": "x"})), final("ok")])
+    ctx = policy_ctx(
+        enabled_tools=frozenset({"send_email"}),
+        available_tools=frozenset({"send_email"}),
+        device_scopes=frozenset({"tool:send_email"}),
+        can_propose=True,
+    )
+    outcome = asyncio.run(make_loop(llm, registry, recorder).run([], "go", ctx))
+    assert [(e.status, e.error_code) for e in recorder.entries] == [
+        (ToolStatus.DENIED, "approval_required")
+    ]
+    assert outcome.tools_used[0].status is ToolStatus.DENIED and tool.calls == 0

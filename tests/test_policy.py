@@ -8,6 +8,7 @@ from friday.orchestration.policy import (
     Deny,
     DenyReason,
     PolicyContext,
+    Propose,
     advertised_tools,
     evaluate,
 )
@@ -175,3 +176,46 @@ def test_reversible_writes_are_allowed_only_when_scoped_and_not_marked_for_appro
 def test_registration_refuses_risky_tools_that_skip_the_approval_flag(risk: RiskClass) -> None:
     with pytest.raises(ToolRegistrationError, match="must require approval"):
         ToolRegistry().register(danger_tool("sloppy", risk_class=risk, requires_approval=False))
+
+
+def test_gated_tools_become_proposals_only_when_the_caller_can_store_them(
+    registry: ToolRegistry,
+) -> None:
+    args = {"text": "x"}
+    assert _reason(evaluate(registry, "send_email", args, _ctx())) is DenyReason.APPROVAL_REQUIRED
+    assert [t.contract.name for t in advertised_tools(registry, _ctx())] == ["echo"]
+
+    ctx = _ctx(can_propose=True)
+    decision = evaluate(registry, "send_email", args, ctx)
+    assert isinstance(decision, Propose) and decision.arguments.model_dump() == {
+        "text": "x",
+        "times": 1,
+    }
+    assert isinstance(evaluate(registry, "echo", args, ctx), Allow)  # ordinary tools still run
+    assert {t.contract.name for t in advertised_tools(registry, ctx)} == {"echo", "send_email"}
+
+
+def test_proposals_still_pass_every_other_check_first(registry: ToolRegistry) -> None:
+    ok = {"text": "x"}
+    assert (
+        _reason(
+            evaluate(registry, "send_email", ok, _ctx(can_propose=True, device_scopes=frozenset()))
+        )
+        is DenyReason.MISSING_SCOPE
+    )
+    assert (
+        _reason(
+            evaluate(registry, "send_email", ok, _ctx(can_propose=True, enabled_tools=frozenset()))
+        )
+        is DenyReason.TOOL_DISABLED
+    )
+    assert (
+        _reason(evaluate(registry, "send_email", {"text": 5}, _ctx(can_propose=True)))
+        is DenyReason.INVALID_ARGUMENTS
+    )
+    assert (
+        _reason(evaluate(registry, "send_email", {"text": "x", "extra": 1}, _ctx(can_propose=True)))
+        is DenyReason.INVALID_ARGUMENTS
+    )
+    exhausted = _ctx(can_propose=True, total_calls=3)
+    assert _reason(evaluate(registry, "send_email", ok, exhausted)) is DenyReason.CALL_LIMIT

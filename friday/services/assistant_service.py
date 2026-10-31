@@ -15,17 +15,21 @@ from friday.domain.exceptions import BudgetExceededError, NotFoundError, Provide
 from friday.orchestration.executor import ToolLoop, ToolUse
 from friday.orchestration.memory import format_memory_block, select_relevant
 from friday.orchestration.policy import PolicyContext, advertised_tools
-from friday.orchestration.tool_contracts import Source
+from friday.orchestration.tool_contracts import Source, ToolError
 from friday.orchestration.tool_registry import ToolRegistry
 from friday.persistence.models import Conversation
 from friday.persistence.repositories.audit import AuditRepository
 from friday.persistence.repositories.conversations import ConversationRepository
+from friday.persistence.repositories.integrations import IntegrationRepository
 from friday.persistence.repositories.memories import MemoryRepository
 from friday.persistence.repositories.tool_executions import ToolExecutionRepository
 from friday.persistence.repositories.usage import UsageRepository
+from friday.services.approval_service import ApprovalService
 from friday.services.auth_service import CurrentUser
 from friday.services.memory_service import MemoryService
+from friday.services.proposals import ApprovalProposals
 from friday.services.tool_recording import DbExecutionRecorder
+from friday.tools.notify import PROVIDER, SendNotificationTool
 from friday.tools.remember import RememberTool
 
 logger = get_logger(__name__)
@@ -110,7 +114,7 @@ class AssistantService:
         try:
             baseline = await self._tokens_used_today(user)
             self._check_budget(baseline, 0)
-            registry = self._registry_for(user, conversation_id)
+            registry = await self._registry_for(user, conversation_id)
             ctx = await self._policy_context(user, registry)
             memory_block = await self._memory_block(user, message, history)
             await self._session.commit()  # no DB transaction is held across LLM or tool calls
@@ -149,6 +153,9 @@ class AssistantService:
                 deadline_seconds=self._settings.ask_deadline_seconds,
                 check_budget=lambda spent: self._check_budget(baseline, spent),
                 on_usage=record_usage,
+                proposals=ApprovalProposals(
+                    ApprovalService(self._session, self._settings), user, conversation_id
+                ),
                 on_event=hooks.progress if hooks else None,
                 check_cancelled=hooks.check_cancelled if hooks else None,
             )
@@ -230,20 +237,38 @@ class AssistantService:
         if used_before + spent_this_ask >= self._settings.daily_token_budget:
             raise BudgetExceededError
 
-    def _registry_for(self, user: CurrentUser, conversation_id: uuid.UUID | None) -> ToolRegistry:
-        """The shared tools plus a `remember` tool bound to this user (suggestions only)."""
-        if not self._settings.memory_enabled:
+    async def _registry_for(
+        self, user: CurrentUser, conversation_id: uuid.UUID | None
+    ) -> ToolRegistry:
+        """Shared tools plus per-user ones: `remember` (suggestions only) and, when the user has
+        connected the integration, `send_notification` (proposals only; the user approves)."""
+        notify = (
+            self._settings.integrations_configured
+            and await IntegrationRepository(self._session).get_active(user.user_id, PROVIDER)
+            is not None
+        )
+        if not (self._settings.memory_enabled or notify):
             return self._registry
         registry = ToolRegistry()
         for tool in self._registry.all():
             registry.register(tool)
 
-        async def suggest(kind: str, value: str) -> None:
-            await MemoryService(self._session, self._settings).propose(
-                user, kind, value, conversation_id
-            )
+        if self._settings.memory_enabled:
 
-        registry.register(RememberTool(suggest))
+            async def suggest(kind: str, value: str) -> None:
+                await MemoryService(self._session, self._settings).propose(
+                    user, kind, value, conversation_id
+                )
+
+            registry.register(RememberTool(suggest))
+        if notify:
+
+            async def never_direct(title: str, message: str) -> None:
+                raise ToolError("approval_required")  # sends only happen after approval
+
+            registry.register(
+                SendNotificationTool(never_direct, self._settings.notification_daily_limit)
+            )
         return registry
 
     async def _memory_block(
@@ -272,6 +297,7 @@ class AssistantService:
             device_scopes=user.scopes,
             max_total_calls_per_ask=self._settings.max_tool_calls_per_ask,
             daily_counts=counts,
+            can_propose=True,
         )
 
     async def _write_conversation(

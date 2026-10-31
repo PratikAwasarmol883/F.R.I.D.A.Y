@@ -17,7 +17,10 @@ class ToolExecution(Base):
 
     __tablename__ = "tool_executions"
     __table_args__ = (
-        CheckConstraint("status IN ('succeeded', 'failed', 'denied', 'timed_out')", name="status"),
+        CheckConstraint(
+            "status IN ('succeeded', 'failed', 'denied', 'timed_out', 'pending_approval')",
+            name="status",
+        ),
         CheckConstraint(
             "risk_class IN ('read_only', 'reversible_write', 'consequential', 'destructive')",
             name="risk_class",

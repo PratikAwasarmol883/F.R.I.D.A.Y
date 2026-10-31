@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from friday.core.security import TOKEN_PREFIX, generate_token, hash_token
 from friday.domain.enums import AuditOutcome, DeviceType
 from friday.domain.exceptions import NotAuthenticatedError, NotFoundError
+from friday.domain.scopes import PLATFORM_SCOPES
 from friday.orchestration.tool_contracts import SCOPE_PATTERN
 from friday.persistence.models import Device, User
+from friday.persistence.repositories.approvals import ApprovalRepository
 from friday.persistence.repositories.audit import AuditRepository
 from friday.persistence.repositories.devices import DeviceRepository
 from friday.persistence.repositories.users import UserRepository
@@ -87,6 +89,7 @@ class AuthService:
         device = await self._devices.revoke(device_id)
         if device is None:
             raise NotFoundError
+        await ApprovalRepository(self._session).reject_pending_for_device(device_id)
         await self._audit.add(
             action="device.revoke",
             outcome=AuditOutcome.SUCCESS,
@@ -116,6 +119,9 @@ class AuthService:
 def _validate_scopes(scopes: list[str]) -> list[str]:
     cleaned = sorted({scope.strip() for scope in scopes if scope.strip()})
     for scope in cleaned:
-        if not SCOPE_PATTERN.match(scope):
-            raise ValueError(f"Invalid scope: {scope!r} (expected tool:<name>)")
+        if not SCOPE_PATTERN.match(scope) and scope not in PLATFORM_SCOPES:
+            raise ValueError(
+                f"Invalid scope: {scope!r} (expected tool:<name> or one of "
+                f"{', '.join(sorted(PLATFORM_SCOPES))})"
+            )
     return cleaned
